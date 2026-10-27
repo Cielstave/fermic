@@ -1,4 +1,6 @@
-# Fermi
+
+![Fermi](https://github.com/user-attachments/assets/27534c3d-e934-4f61-ad62-da36151fec51)
+
 
 Fermi is a systems language and compiler project focused on building high-performance backend, runtime, and infrastructure software with explicit ownership, predictable memory behavior, and verification-oriented design.
 
