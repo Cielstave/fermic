@@ -1,0 +1,9 @@
+@effects()
+func negate<T: signed_integer>(value: T) -> T {
+    return -value;
+}
+@effects()
+func flags<T: unsigned_integer>(value: T, mask: T) -> T {
+    return (value | mask) ^ ~mask;
+}
+func f() -> i16 { return negate<i16>(-7); }

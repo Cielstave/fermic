@@ -1,0 +1,45 @@
+export func bounded_sum(input: read i16[]) -> i64 {
+    if (input.len > 4096) { return 0; }
+    var total: i64 = 0;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += widen<i64>(input[i]);
+    }
+    return total;
+}
+
+export func seeded_sum(input: read i16[], seed: i64) -> i64 {
+    if (input.len > 4096) { return 0; }
+    var total: i64 = seed;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += widen<i64>(input[i]);
+    }
+    return total;
+}
+
+export func wide_sum(input: read i64[]) -> i64 {
+    if (input.len > 4096) { return 0; }
+    var total: i64 = 0;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += input[i];
+    }
+    return total;
+}
+
+export func two_updates(input: read i16[]) -> i64 {
+    if (input.len > 4096) { return 0; }
+    var total: i64 = 0;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += widen<i64>(input[i]);
+        total += 9223372036854775807;
+    }
+    return total;
+}
+
+export func different_input(input: read i16[], other: read i16[]) -> i64 {
+    if (input.len > 4096) { return 0; }
+    var total: i64 = 0;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += widen<i64>(other[i]);
+    }
+    return total;
+}

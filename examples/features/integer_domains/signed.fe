@@ -1,0 +1,17 @@
+@effects()
+@budget(work = 100, heap = 0)
+pub func negate<T: signed_integer>(value: T) -> T {
+    return -value;
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func sign<T: signed_integer>(value: T) -> T {
+    if (value < 0) {
+        return -1;
+    }
+    if (value > 0) {
+        return 1;
+    }
+    return 0;
+}

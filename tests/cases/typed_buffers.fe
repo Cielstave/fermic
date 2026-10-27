@@ -1,0 +1,222 @@
+use std.buffer;
+
+struct Samples { values: Buffer<i32>; }
+
+func exercise<T: integer>(source: read T[], output: edit T[], limit: usize) -> Result<usize, buffer.Error> {
+    let length: usize = source.len;
+    if (output.len < length) { return Result.err(buffer.Error.invalid_argument); }
+    var values: Buffer<T> = try(buffer.allocate<T>(length, limit));
+    for (var index: usize = 0; index < length; index += 1) {
+        if (values[index] != 0) { return Result.err(buffer.Error.invalid_state); }
+        values[index] = source[index];
+    }
+    let capacity: usize = try(buffer.reserve<T>(edit values, length + 2));
+    if (capacity != length + 2 || values.len != length) { return Result.err(buffer.Error.invalid_state); }
+    let expanded: usize = try(buffer.resize<T>(edit values, length + 2));
+    if (values[length] != 0 || values[length + 1] != 0) { return Result.err(buffer.Error.invalid_state); }
+    values[length] = 1;
+    let shrunk: usize = try(buffer.resize<T>(edit values, length));
+    let restored: usize = try(buffer.resize<T>(edit values, expanded));
+    if (values[length] != 0 || values.capacity != capacity) { return Result.err(buffer.Error.invalid_state); }
+    for (var index: usize = 0; index < length; index += 1) { output[index] = values[index]; }
+    let reduced: usize = try(buffer.resize<T>(edit values, length));
+    for (var index: usize = 0; index < length; index += 1) {
+        let item: T = try(buffer.pop<T>(edit values));
+        if (item != source[length - index - 1]) { return Result.err(buffer.Error.invalid_state); }
+    }
+    match (buffer.pop<T>(edit values)) {
+        case Result.ok(let item: T) { return Result.err(buffer.Error.invalid_state); }
+        case Result.err(let error: buffer.Error) {
+            if (error != buffer.Error.invalid_argument) { return Result.err(buffer.Error.invalid_state); }
+        }
+    }
+    let extended: usize = try(buffer.extend<T>(edit values, read source));
+    let unchanged: usize = try(buffer.extend<T>(edit values, read source[0..0]));
+    if (extended != length || unchanged != length || values.capacity != capacity) {
+        return Result.err(buffer.Error.invalid_state);
+    }
+    for (var index: usize = 0; index < length; index += 1) {
+        if (values[index] != source[index]) { return Result.err(buffer.Error.invalid_state); }
+    }
+    let copied: Buffer<T> = try(buffer.from_slice<T>(read values, limit));
+    for (var index: usize = 0; index < length; index += 1) { values[index] = 0; }
+    for (var index: usize = 0; index < length; index += 1) {
+        if (copied[index] != source[index]) { return Result.err(buffer.Error.invalid_state); }
+    }
+    return Result.ok(length);
+}
+
+export func copy_u8(source: read u8[], output: edit u8[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<u8>(read source, edit output, limit);
+}
+export func copy_i8(source: read i8[], output: edit i8[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<i8>(read source, edit output, limit);
+}
+export func copy_u16(source: read u16[], output: edit u16[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<u16>(read source, edit output, limit);
+}
+export func copy_i16(source: read i16[], output: edit i16[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<i16>(read source, edit output, limit);
+}
+export func copy_u32(source: read u32[], output: edit u32[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<u32>(read source, edit output, limit);
+}
+export func copy_i32(source: read i32[], output: edit i32[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<i32>(read source, edit output, limit);
+}
+export func copy_u64(source: read u64[], output: edit u64[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<u64>(read source, edit output, limit);
+}
+export func copy_i64(source: read i64[], output: edit i64[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<i64>(read source, edit output, limit);
+}
+export func copy_usize(source: read usize[], output: edit usize[], limit: usize) -> Result<usize, buffer.Error> {
+    return exercise<usize>(read source, edit output, limit);
+}
+
+export func zero_length() -> Result<usize, buffer.Error> {
+    var values: Buffer<i32> = try(buffer.allocate<i32>(0, 0));
+    return buffer.resize<i32>(edit values, 0);
+}
+
+export func failed_growth() -> Result<usize, buffer.Error> {
+    var values: Buffer<u32> = try(buffer.allocate<u32>(2, 32));
+    values[0] = 7;
+    values[1] = 11;
+    match (buffer.reserve<u32>(edit values, 8)) {
+        case Result.ok(let count: usize) { return Result.ok(count); }
+        case Result.err(let error: buffer.Error) {
+            if (values.len != 2 || values.capacity != 2 || values[0] != 7 || values[1] != 11) {
+                return Result.err(buffer.Error.invalid_state);
+            }
+            return Result.err(error);
+        }
+    }
+}
+
+export func allocation_error(length: usize, limit: usize) -> Result<usize, buffer.Error> {
+    let values: Buffer<u64> = try(buffer.allocate<u64>(length, limit));
+    return Result.ok(values.len);
+}
+
+export func fault_cleanup(index: usize) -> Result<usize, buffer.Error> {
+    let values: Buffer<i32> = try(buffer.allocate<i32>(2, 32));
+    if (values[index] == 0) { return Result.ok(1); }
+    return Result.ok(0);
+}
+
+func collect() -> Result<bool, buffer.Error> {
+    var values: Buffer<i32> = try(buffer.allocate<i32>(3, 64));
+    values[0] = -17;
+    values[1] = 42;
+    values[2] = -9;
+    let samples: Samples = Samples(values = move(values));
+    return Result.ok(samples.values[0] == -17 && samples.values[1] == 42 && samples.values[2] == -9);
+}
+
+func test_record_ownership() -> bool {
+    match (collect()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+export func push_values(limit: usize, fail_expected: bool) -> Result<usize, buffer.Error> {
+    var values: Buffer<i32> = try(buffer.allocate<i32>(0, limit));
+    for (var index: usize = 0; index < 5; index += 1) {
+        match (buffer.push<i32>(edit values, -17)) {
+            case Result.ok(let length: usize) {
+                if (length != index + 1) { return Result.err(buffer.Error.invalid_state); }
+            }
+            case Result.err(let error: buffer.Error) {
+                if (!fail_expected || values.len != index) { return Result.err(buffer.Error.invalid_state); }
+                for (var stored: usize = 0; stored < index; stored += 1) {
+                    if (values[stored] != -17) { return Result.err(buffer.Error.invalid_state); }
+                }
+                return Result.err(error);
+            }
+        }
+    }
+    for (var index: usize = 0; index < values.len; index += 1) {
+        if (values[index] != -17) { return Result.err(buffer.Error.invalid_state); }
+    }
+    return Result.ok(values.capacity);
+}
+
+export func stack_cycle() -> Result<i32, buffer.Error> {
+    var values: Buffer<i32> = try(buffer.allocate<i32>(0, 32));
+    let first: usize = try(buffer.push<i32>(edit values, -17));
+    let second: usize = try(buffer.push<i32>(edit values, 42));
+    let capacity: usize = values.capacity;
+    let right: i32 = try(buffer.pop<i32>(edit values));
+    let left: i32 = try(buffer.pop<i32>(edit values));
+    if (right != 42 || left != -17 || values.len != 0 || values.capacity != capacity) {
+        return Result.err(buffer.Error.invalid_state);
+    }
+    match (buffer.pop<i32>(edit values)) {
+        case Result.ok(let item: i32) { return Result.err(buffer.Error.invalid_state); }
+        case Result.err(let error: buffer.Error) {
+            if (error != buffer.Error.invalid_argument || values.capacity != capacity) {
+                return Result.err(buffer.Error.invalid_state);
+            }
+        }
+    }
+    let reused: usize = try(buffer.push<i32>(edit values, 9));
+    let result: i32 = try(buffer.pop<i32>(edit values));
+    return Result.ok(result);
+}
+
+export func extend_values(limit: usize) -> Result<usize, buffer.Error> {
+    var values: Buffer<i32> = try(buffer.allocate<i32>(2, limit));
+    values[0] = -17;
+    values[1] = 42;
+    let suffix: i32[3] = [-2147483648, 0, 2147483647];
+    match (buffer.extend<i32>(edit values, read suffix)) {
+        case Result.ok(let length: usize) {
+            if (length != 5 || values[0] != -17 || values[1] != 42 ||
+                values[2] != suffix[0] || values[3] != 0 || values[4] != suffix[2]) {
+                return Result.err(buffer.Error.invalid_state);
+            }
+            return Result.ok(length);
+        }
+        case Result.err(let error: buffer.Error) {
+            if (values.len != 2 || values.capacity != 2 || values[0] != -17 || values[1] != 42) {
+                return Result.err(buffer.Error.invalid_state);
+            }
+            return Result.err(error);
+        }
+    }
+}
+
+func bulk_checks() -> Result<bool, buffer.Error> {
+    var source: i32[2] = [-17, 42];
+    let copied: Buffer<i32> = try(buffer.from_slice<i32>(read source, 8));
+    source[0] = 99;
+    if (copied.len != 2 || copied.capacity != 2 || copied[0] != -17 || copied[1] != 42) {
+        return Result.ok(false);
+    }
+    var empty: Buffer<i32> = try(buffer.from_slice<i32>(read source[0..0], 0));
+    let length: usize = try(buffer.extend<i32>(edit empty, read source[0..0]));
+    if (length != 0 || empty.capacity != 0) { return Result.ok(false); }
+    match (buffer.extend<i32>(edit empty, read source)) {
+        case Result.ok(let size: usize) { return Result.ok(false); }
+        case Result.err(let error: buffer.Error) {
+            return Result.ok(error == buffer.Error.limit && empty.len == 0 && empty.capacity == 0);
+        }
+    }
+}
+
+func test_bulk_copy() -> bool {
+    match (bulk_checks()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+export func copy_slice(source: read i32[], limit: usize) -> Result<usize, buffer.Error> {
+    let values: Buffer<i32> = try(buffer.from_slice<i32>(read source, limit));
+    for (var index: usize = 0; index < source.len; index += 1) {
+        if (values[index] != source[index]) { return Result.err(buffer.Error.invalid_state); }
+    }
+    return Result.ok(values.len);
+}

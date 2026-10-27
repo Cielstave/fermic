@@ -1,0 +1,21 @@
+use std.io;
+
+enum Error { invalid_limit, }
+
+func validate(limit: usize) -> Result<void, Error> {
+    if (limit == 0 || limit > 4096) {
+        return Result.err(Error.invalid_limit);
+    }
+    return Result.ok();
+}
+
+func main() -> i32 {
+    match (validate(1024)) {
+        case Result.ok() {}
+        case Result.err(let error: Error) { return 64; }
+    }
+    match (io.write(read "unit Result validated\n")) {
+        case Result.ok(let count: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}

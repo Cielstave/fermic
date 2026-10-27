@@ -1,0 +1,20 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.memory;
+use jobs.model;
+
+pub func compute(samples: read u8[], context: read backend.Context)
+    -> Result<model.Histogram, backend.Failure> {
+    var bins: u32[256] = memory.zeroed<u32[256]>();
+    for (var index: usize = 0; index < samples.len; index += 1) {
+        if (index % 1024 == 0) {
+            try backend.checkpoint(read context, 1024);
+        }
+        let bucket: usize = widen<usize>(samples[index]);
+        bins[bucket] += 1;
+    }
+    return Result.ok(model.Histogram {
+        bins: move(bins),
+        count: samples.len,
+    });
+}

@@ -1,0 +1,12 @@
+use enum_module.state;
+
+enum Mode { other, }
+
+func main() -> i32 {
+    let mode: state.Mode = state.current();
+    match (mode) {
+        case state.Mode.idle { return 1; }
+        case state.Mode.running { return 0; }
+        case state.Mode.stopped { return 2; }
+    }
+}

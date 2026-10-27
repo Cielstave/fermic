@@ -1,0 +1,52 @@
+use std.io;
+use std.mem;
+
+@effects()
+export func checksum(input: read u8[]) -> u32 {
+    var total: u32 = 0;
+    for (var index: usize = 0; index < input.len; index += 1) {
+        total = (total + widen<u32>(input[index])) % 65536;
+    }
+    return total;
+}
+
+@effects(memory)
+func copy_bytes(input: read u8[]) -> Result<Buffer<u8>, mem.Error> {
+    return mem.from_bytes(read input, 4096);
+}
+
+@effects(memory)
+export func copied_checksum(input: read u8[]) -> Result<u32, mem.Error> {
+    let buffer: Buffer<u8> = try(copy_bytes(read input));
+    return Result.ok(checksum(read buffer));
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+export func increment(value: u8) -> u16 {
+    return widen<u16>(value) + 1;
+}
+
+@effects(io.write)
+func report() -> void {
+    io.println(read "Effect contracts passed.");
+}
+
+func test_checksum() -> bool {
+    return checksum(read "Fe") == 171;
+}
+
+func test_copy() -> bool {
+    match (copied_checksum(read "Fe")) {
+        case Result.ok(let value: u32) {
+            return value == 171;
+        }
+        case Result.err(let error: mem.Error) {
+            return false;
+        }
+    }
+}
+
+func main() -> void {
+    report();
+}

@@ -1,0 +1,29 @@
+use numeric;
+use std.io;
+
+@effects()
+func test_signed_values() -> bool {
+    return numeric.larger<i32>(-7, 4) == 4;
+}
+
+@effects()
+func test_unsigned_values() -> bool {
+    return numeric.larger<u64>(4294967296, 9) == 4294967296;
+}
+
+@effects()
+func test_integer_view() -> bool {
+    let values: i16[3] = [-3, 8, 12];
+    return numeric.contains<i16>(read values, 8)
+        && !numeric.contains<i16>(read values, 4);
+}
+
+@effects(io.write)
+func main() -> i32 {
+    if (!test_signed_values() || !test_unsigned_values() || !test_integer_view()) {
+        io.println(read "integer-generics: checks failed");
+        return 1;
+    }
+    io.println(read "integer-generics: checks passed");
+    return 0;
+}

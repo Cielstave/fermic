@@ -1,0 +1,2 @@
+// Intentionally rejected: generic parameters require explicit constraints.
+func identity<T>(value: T) -> T { return value; }

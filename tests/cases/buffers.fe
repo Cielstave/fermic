@@ -1,0 +1,428 @@
+use std.mem;
+
+func allocate(length: usize, limit: usize) -> Result<Buffer<u8>, mem.Error> {
+    return mem.bytes(length, limit);
+}
+
+func forward(result: Result<Buffer<u8>, mem.Error>) -> Result<Buffer<u8>, mem.Error> {
+    return move(result);
+}
+
+func rewrap(result: Result<Buffer<u8>, mem.Error>) -> Result<Buffer<u8>, mem.Error> {
+    match (result) {
+        case Result.ok(let owner: Buffer<u8>) { return Result.ok(move(owner)); }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+func identity(bytes: Buffer<u8>) -> Buffer<u8> { return move(bytes); }
+func discard(bytes: Buffer<u8>) -> void {}
+func fill(bytes: edit u8[]) -> void {
+    for (var i: usize = 0; i < bytes.len; i += 1) { bytes[i] = 65; }
+}
+func at(bytes: Buffer<u8>, index: usize) -> u8 { return bytes[index]; }
+func add(bytes: Buffer<u8>, value: i32) -> i32 { return value + widen<i32>(bytes[0]); }
+
+export func basic(length: usize, limit: usize) -> Result<usize, mem.Error> {
+    let result: Result<Buffer<u8>, mem.Error> = forward(rewrap(allocate(length, limit)));
+    match (result) {
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+        case Result.ok(let owner: Buffer<u8>) {
+            var bytes: Buffer<u8> = identity(move(owner));
+            for (var i: usize = 0; i < bytes.len; i += 1) {
+                if (bytes[i] != 0) { return Result.ok(99999); }
+            }
+            fill(edit bytes);
+            if (length > 0) {
+                if (bytes[length - 1] != 65) { return Result.ok(99998); }
+            }
+            return Result.ok(bytes.len);
+        }
+    }
+}
+
+export func chain() -> Result<usize, mem.Error> {
+    var a: Buffer<u8>;
+    match (mem.bytes(1, 16)) {
+        case Result.ok(let owner: Buffer<u8>) { a = move(owner); }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+    var b: Buffer<u8>;
+    match (mem.bytes(2, 16)) {
+        case Result.ok(let owner: Buffer<u8>) { b = move(owner); }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+    var c: Buffer<u8>;
+    match (mem.bytes(3, 16)) {
+        case Result.ok(let owner: Buffer<u8>) { c = move(owner); }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+    var d: Buffer<u8>;
+    match (mem.bytes(4, 16)) {
+        case Result.ok(let owner: Buffer<u8>) { d = move(owner); }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+    return Result.ok(a.len + b.len + c.len + d.len);
+}
+
+export func scopes(rounds: usize) -> i32 {
+    for (var i: usize = 0; i < rounds; i += 1) {
+        match (mem.bytes(1, 8)) {
+            case Result.ok(let outer: Buffer<u8>) {
+                var outer_slot: Buffer<u8> = move(outer);
+                {
+                    match (mem.bytes(2, 8)) {
+                        case Result.ok(let inner: Buffer<u8>) {
+                            var inner_slot: Buffer<u8> = move(inner);
+                        }
+                        case Result.err(let error: mem.Error) { return -2; }
+                    }
+                }
+            }
+            case Result.err(let error: mem.Error) { return -1; }
+        }
+    }
+    return 0;
+}
+
+export func conditional(create: bool, consume: bool) -> i32 {
+    var bytes: Buffer<u8>;
+    if (create) {
+        match (mem.bytes(3, 8)) {
+            case Result.ok(let owner: Buffer<u8>) { bytes = move(owner); }
+            case Result.err(let error: mem.Error) { return -1; }
+        }
+        if (consume) { discard(move(bytes)); }
+    }
+    return 0;
+}
+
+export func replacement() -> usize {
+    match (mem.bytes(3, 8)) {
+        case Result.ok(let first: Buffer<u8>) {
+            var bytes: Buffer<u8> = move(first);
+            bytes[0] = 77;
+            match (mem.bytes(4, 8)) {
+                case Result.ok(let second: Buffer<u8>) {
+                    bytes = move(second);
+                    bytes = move(bytes);
+                }
+                case Result.err(let error: mem.Error) { return widen<usize>(bytes[0]); }
+            }
+            return identity(move(bytes)).len;
+        }
+        case Result.err(let error: mem.Error) { return 0; }
+    }
+}
+
+export func fault(index: usize, divisor: i32, inside: bool) -> i32 {
+    match (mem.bytes(3, 8)) {
+        case Result.ok(let bytes: Buffer<u8>) {
+            if (inside) { return widen<i32>(at(move(bytes), index)); }
+            return add(move(bytes), 9 / divisor);
+        }
+        case Result.err(let error: mem.Error) { return -1; }
+    }
+}
+
+func second_fault(first: Buffer<u8>, second: Buffer<u8>, divisor: i32) -> i32 {
+    return 9 / divisor;
+}
+
+export func two_arguments(divisor: i32) -> i32 {
+    match (mem.bytes(2, 8)) {
+        case Result.ok(let first: Buffer<u8>) {
+            match (mem.bytes(3, 8)) {
+                case Result.ok(let second: Buffer<u8>) {
+                    return second_fault(identity(move(first)), identity(move(second)), 9 / divisor);
+                }
+                case Result.err(let error: mem.Error) { return -2; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return -1; }
+    }
+}
+
+export func slices(length: usize, start: usize, end: usize) -> usize {
+    match (mem.bytes(length, 16)) {
+        case Result.ok(let owner: Buffer<u8>) {
+            var bytes: Buffer<u8> = move(owner);
+            fill(edit bytes[start..end]);
+            return bytes.len;
+        }
+        case Result.err(let error: mem.Error) { return 99; }
+    }
+}
+
+export func pending_result(divisor: i32) -> i32 {
+    let pending: Result<Buffer<u8>, mem.Error> = mem.bytes(3, 8);
+    let value: i32 = 9 / divisor;
+    match (pending) {
+        case Result.ok(let owner: Buffer<u8>) { return value; }
+        case Result.err(let error: mem.Error) { return -1; }
+    }
+}
+
+func accept_result(pending: Result<Buffer<u8>, mem.Error>, value: i32) -> i32 {
+    match (pending) {
+        case Result.ok(let owner: Buffer<u8>) { return value; }
+        case Result.err(let error: mem.Error) { return -1; }
+    }
+}
+
+export func result_argument(divisor: i32) -> i32 {
+    return accept_result(mem.bytes(3, 8), 9 / divisor);
+}
+
+export func loop_owner() -> i32 {
+    var iteration: usize = 0;
+    match (mem.bytes(1, 8)) {
+        case Result.ok(let owner: Buffer<u8>) {
+            for (var bytes: Buffer<u8> = move(owner); iteration < 3; iteration += 1) {
+                bytes[0] = 1;
+            }
+            match (mem.bytes(1, 8)) {
+                case Result.ok(let next: Buffer<u8>) {}
+                case Result.err(let error: mem.Error) { return -2; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return -1; }
+    }
+    return 0;
+}
+
+export func copy_bytes(source: read u8[], output: edit u8[], limit: usize)
+    -> Result<usize, mem.Error> {
+    match (mem.from_bytes(read source, limit)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            for (var index: usize = 0; index < buffer.len; index += 1) {
+                output[index] = buffer[index];
+                buffer[index] = 99;
+            }
+            return Result.ok(buffer.len);
+        }
+        case Result.err(let error: mem.Error) {
+            return Result.err(error);
+        }
+    }
+}
+
+func copy_local() -> Result<Buffer<u8>, mem.Error> {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var source: Buffer<u8> = move(allocation);
+            source[0] = 17;
+            source[3] = 255;
+            return mem.from_bytes(read source, 4);
+        }
+        case Result.err(let error: mem.Error) {
+            return Result.err(error);
+        }
+    }
+}
+
+export func copy_lifetime() -> Result<usize, mem.Error> {
+    match (copy_local()) {
+        case Result.ok(let buffer: Buffer<u8>) {
+            return Result.ok(widen<usize>(buffer[0]) + widen<usize>(buffer[3]));
+        }
+        case Result.err(let error: mem.Error) {
+            return Result.err(error);
+        }
+    }
+}
+
+func adjust(buffer: edit Buffer<u8>, count: usize, reserve: bool) -> Result<usize, mem.Error> {
+    if (reserve) {
+        return mem.reserve(edit buffer, count);
+    }
+    return mem.resize(edit buffer, count);
+}
+
+export func growth(initial: usize, target: usize, limit: usize, reserve: bool)
+    -> Result<usize, mem.Error> {
+    match (mem.bytes(initial, limit)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            for (var index: usize = 0; index < buffer.len; index += 1) {
+                buffer[index] = 77;
+            }
+            let result: Result<usize, mem.Error> = adjust(edit buffer, target, reserve);
+            match (result) {
+                case Result.err(let error: mem.Error) {
+                    if (buffer.len != initial || buffer.capacity != initial) {
+                        return Result.ok(99990);
+                    }
+                    for (var index: usize = 0; index < buffer.len; index += 1) {
+                        if (buffer[index] != 77) { return Result.ok(99991); }
+                    }
+                    return Result.err(error);
+                }
+                case Result.ok(let count: usize) {
+                    var expected_length: usize = target;
+                    if (reserve) { expected_length = initial; }
+                    var expected_capacity: usize = initial;
+                    if (target > initial) { expected_capacity = target; }
+                    if (buffer.len != expected_length || buffer.capacity != expected_capacity) {
+                        return Result.ok(99992);
+                    }
+                    if ((reserve && count != buffer.capacity) || (!reserve && count != buffer.len)) {
+                        return Result.ok(99993);
+                    }
+                    for (var index: usize = 0; index < buffer.len; index += 1) {
+                        if (index < initial) {
+                            if (buffer[index] != 77) { return Result.ok(99994); }
+                        } else {
+                            if (buffer[index] != 0) { return Result.ok(99995); }
+                        }
+                    }
+                    return Result.ok(count);
+                }
+            }
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+func regrow(buffer: edit Buffer<u8>) -> Result<usize, mem.Error> {
+    match (adjust(edit buffer, 8, true)) {
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+        case Result.ok(let capacity: usize) {}
+    }
+    buffer[0] = 77;
+    buffer[1] = 88;
+    match (adjust(edit buffer, 1, false)) {
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+        case Result.ok(let length: usize) {}
+    }
+    match (adjust(edit buffer, 8, false)) {
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+        case Result.ok(let length: usize) {}
+    }
+    if (buffer[0] != 77) { return Result.ok(99990); }
+    for (var index: usize = 1; index < buffer.len; index += 1) {
+        if (buffer[index] != 0) { return Result.ok(99991); }
+    }
+    fill(edit buffer[0..4]);
+    fill(edit buffer[4..8]);
+    return Result.ok(buffer.capacity);
+}
+
+export func shrink_regrow() -> Result<usize, mem.Error> {
+    match (mem.bytes(3, 16)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            return regrow(edit buffer);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func growth_fault(divisor: usize, after: bool) -> usize {
+    match (mem.bytes(4, 16)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            match (adjust(edit buffer, 8 / divisor, false)) {
+                case Result.err(let error: mem.Error) { return 99990; }
+                case Result.ok(let length: usize) {}
+            }
+            if (after) { return widen<usize>(buffer[8]); }
+            return buffer.len;
+        }
+        case Result.err(let error: mem.Error) { return 99991; }
+    }
+}
+
+func grow_with_owner(buffer: edit Buffer<u8>, extra: Result<Buffer<u8>, mem.Error>,
+    length: usize) -> Result<usize, mem.Error> {
+    match (extra) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            return adjust(edit buffer, length, false);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func growth_arguments(divisor: usize) -> Result<usize, mem.Error> {
+    match (mem.bytes(4, 16)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            return grow_with_owner(edit buffer, mem.bytes(1, 1), 8 / divisor);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func growth_loop(rounds: usize) -> Result<usize, mem.Error> {
+    match (mem.bytes(0, 64)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            for (var index: usize = 0; index < rounds; index += 1) {
+                match (adjust(edit buffer, index + 1, false)) {
+                    case Result.err(let error: mem.Error) { return Result.err(error); }
+                    case Result.ok(let length: usize) {}
+                }
+                buffer[index] = 55;
+            }
+            for (var index: usize = 0; index < buffer.len; index += 1) {
+                if (buffer[index] != 55) { return Result.ok(99990); }
+            }
+            return Result.ok(buffer.len);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+@budget(work = 1000, heap = 0)
+func descriptor_length(buffer: edit Buffer<u8>) -> usize {
+    return buffer.len;
+}
+
+func resized_owner() -> Result<Buffer<u8>, mem.Error> {
+    match (mem.bytes(2, 16)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            match (adjust(edit buffer, 6, false)) {
+                case Result.ok(let length: usize) { return Result.ok(move(buffer)); }
+                case Result.err(let error: mem.Error) { return Result.err(error); }
+            }
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func growth_return() -> Result<usize, mem.Error> {
+    match (resized_owner()) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            if (buffer[5] != 0) { return Result.ok(99990); }
+            return Result.ok(descriptor_length(edit buffer));
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func shift_fault(count: usize) -> Result<u8, mem.Error> {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let buffer: Buffer<u8>) {
+            let value: u8 = 255;
+            return Result.ok(value << count);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}
+
+export func unit_owner(fail: bool) -> Result<void, mem.Error> {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            if (fail) {
+                let index: usize = buffer.len;
+                buffer[index] = 1;
+            }
+            return Result.ok();
+        }
+        case Result.err(let error: mem.Error) { return Result.err(error); }
+    }
+}

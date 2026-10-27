@@ -1,0 +1,14 @@
+use std.text;
+
+pub enum Route {
+    jobs,
+    report,
+    unknown,
+}
+
+@effects()
+pub func classify(path: str) -> Route {
+    if (text.starts_with(path, "/jobs/")) { return Route.jobs; }
+    if (text.ends_with(path, ".json")) { return Route.report; }
+    return Route.unknown;
+}

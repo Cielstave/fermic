@@ -1,0 +1,62 @@
+pub enum Error {
+    input_too_short,
+    output_too_small,
+}
+
+// Only the low eight bits reach narrow; the error arm cannot be selected.
+@budget(work = 100, heap = 0)
+func low_byte(value: u32) -> u8 {
+    match (narrow<u8>(value & 255)) {
+        case Result.ok(let byte: u8) {
+            return byte;
+        }
+        case Result.err(let error: CastError) {
+            return 0;
+        }
+    }
+}
+
+@budget(work = 200, heap = 0)
+pub func read_u32_be(input: read u8[]) -> Result<u32, Error> {
+    if (input.len < 4) {
+        return Result.err(Error.input_too_short);
+    }
+    let value: u32 = (widen<u32>(input[0]) << 24) | (widen<u32>(input[1]) << 16)
+        | (widen<u32>(input[2]) << 8) | widen<u32>(input[3]);
+    return Result.ok(value);
+}
+
+@budget(work = 200, heap = 0)
+pub func read_u32_le(input: read u8[]) -> Result<u32, Error> {
+    if (input.len < 4) {
+        return Result.err(Error.input_too_short);
+    }
+    let value: u32 = widen<u32>(input[0]) | (widen<u32>(input[1]) << 8)
+        | (widen<u32>(input[2]) << 16) | (widen<u32>(input[3]) << 24);
+    return Result.ok(value);
+}
+
+// Check capacity before writing. Success touches exactly four bytes.
+@budget(work = 500, heap = 0)
+pub func write_u32_be(value: u32, output: edit u8[]) -> Result<usize, Error> {
+    if (output.len < 4) {
+        return Result.err(Error.output_too_small);
+    }
+    output[0] = low_byte(value >> 24);
+    output[1] = low_byte(value >> 16);
+    output[2] = low_byte(value >> 8);
+    output[3] = low_byte(value);
+    return Result.ok(4);
+}
+
+@budget(work = 500, heap = 0)
+pub func write_u32_le(value: u32, output: edit u8[]) -> Result<usize, Error> {
+    if (output.len < 4) {
+        return Result.err(Error.output_too_small);
+    }
+    output[0] = low_byte(value);
+    output[1] = low_byte(value >> 8);
+    output[2] = low_byte(value >> 16);
+    output[3] = low_byte(value >> 24);
+    return Result.ok(4);
+}

@@ -1,0 +1,46 @@
+use "src/runner.fe";
+use "src/diagnostics.fe";
+use std.args;
+use std.mem;
+
+func run() -> Result<i32, mem.Error> {
+    var source: Buffer<u8> = try(mem.bytes(4096, 4096));
+    var destination: Buffer<u8> = try(mem.bytes(4096, 4096));
+    match (args.read_into(0, edit source)) {
+        case Result.ok(let source_length: usize) {
+            match (args.read_into(1, edit destination)) {
+                case Result.ok(let destination_length: usize) {
+                    let status: i32 = runner.execute(read source[0..source_length], read destination[0..destination_length]);
+                    return Result.ok(status);
+                }
+                case Result.err(let error: args.Error) {
+                    return Result.ok(diagnostics.failure(read "library: invalid report path argument", 0, 64));
+                }
+            }
+        }
+        case Result.err(let error: args.Error) {
+            return Result.ok(diagnostics.failure(read "library: invalid journal path argument", 0, 64));
+        }
+    }
+}
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 2) {
+                return diagnostics.failure(read "usage: library JOURNAL REPORT", 0, 64);
+            }
+        }
+        case Result.err(let error: args.Error) {
+            return diagnostics.failure(read "library: process arguments unavailable", 0, 71);
+        }
+    }
+    match (run()) {
+        case Result.ok(let status: i32) {
+            return status;
+        }
+        case Result.err(let error: mem.Error) {
+            return diagnostics.failure(read "library: path buffer allocation failed", 0, 71);
+        }
+    }
+}

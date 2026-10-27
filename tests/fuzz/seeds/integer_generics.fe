@@ -1,0 +1,10 @@
+enum Error { invalid, }
+@effects()
+func larger<T: integer>(left: T, right: T) -> T {
+    if (left > right) { return left; }
+    return right;
+}
+func nested<T: integer>(value: T) -> Result<Result<T, Error>, Error> {
+    return Result.ok(Result.ok(larger<T>(value, 0)));
+}
+func f() -> u32 { return larger<u32>(8, 9); }

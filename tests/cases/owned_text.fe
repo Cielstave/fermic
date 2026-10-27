@@ -1,0 +1,277 @@
+use std.text;
+
+struct Label { value: text.Text; }
+
+func test_runtime_text() -> bool {
+    var input: u8[5] = [99, 97, 102, 195, 169];
+    match (text.from_utf8(read input, 64)) {
+        case Result.ok(let value: text.Text) {
+            input[0] = 88;
+            var output: u8[8] = [165; 8];
+            match (text.copy_into(read value, edit output)) {
+                case Result.ok(let count: usize) {
+                    return count == 5 && text.length(read value) == 5 &&
+                           text.scalar_length(read value) == 4 && output[0] == 99 && output[5] == 165;
+                }
+                case Result.err(let error: text.Error) { return false; }
+            }
+        }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func test_append_and_move() -> bool {
+    match (text.from_utf8(read "worker", 64)) {
+        case Result.ok(let initial: text.Text) {
+            var value: text.Text = move(initial);
+            match (text.append(edit value, read " café")) {
+                case Result.ok(let count: usize) {
+                    let label: Label = Label(value = move(value));
+                    return count == 12 && text.length(read label.value) == 12 &&
+                           text.scalar_length(read label.value) == 11;
+                }
+                case Result.err(let error: text.Error) { return false; }
+            }
+        }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func test_invalid_append_preserves_text() -> bool {
+    match (text.from_utf8(read "ready", 5)) {
+        case Result.ok(let initial: text.Text) {
+            var value: text.Text = move(initial);
+            let invalid: u8[1] = [255];
+            match (text.append(edit value, read invalid)) {
+                case Result.ok(let count: usize) { return false; }
+                case Result.err(let error: text.Error) {
+                    return error == text.Error.invalid_utf8 && text.length(read value) == 5;
+                }
+            }
+        }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func test_limit_and_output() -> bool {
+    match (text.from_utf8(read "ready", 5)) {
+        case Result.ok(let initial: text.Text) {
+            var value: text.Text = move(initial);
+            match (text.append(edit value, read "!")) {
+                case Result.ok(let count: usize) { return false; }
+                case Result.err(let error: text.Error) {
+                    if (error != text.Error.limit) { return false; }
+                }
+            }
+            var output: u8[4] = [165; 4];
+            match (text.copy_into(read value, edit output)) {
+                case Result.ok(let count: usize) { return false; }
+                case Result.err(let error: text.Error) {
+                    return error == text.Error.output_too_small && output[0] == 165 && output[3] == 165;
+                }
+            }
+        }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func test_empty_and_nul() -> bool {
+    match (text.from_utf8(read "", 8)) {
+        case Result.ok(let initial: text.Text) {
+            var value: text.Text = move(initial);
+            let bytes: u8[3] = [65, 0, 66];
+            match (text.append(edit value, read bytes)) {
+                case Result.ok(let count: usize) {
+                    return count == 3 && text.scalar_length(read value) == 3;
+                }
+                case Result.err(let error: text.Error) { return false; }
+            }
+        }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+export func validate_utf8(bytes: read u8[]) -> bool { return text.valid_utf8(read bytes); }
+
+export func text_roundtrip(bytes: read u8[], limit: usize, output: edit u8[]) -> Result<usize, text.Error> {
+    let value: text.Text = try(text.from_utf8(read bytes, limit));
+    return text.copy_into(read value, edit output);
+}
+
+export func text_append(initial: read u8[], suffix: read u8[], limit: usize, output: edit u8[]) -> Result<usize, text.Error> {
+    var value: text.Text = try(text.from_utf8(read initial, limit));
+    match (text.append(edit value, read suffix)) {
+        case Result.ok(let count: usize) { return text.copy_into(read value, edit output); }
+        case Result.err(let error: text.Error) {
+            match (text.copy_into(read value, edit output)) {
+                case Result.ok(let count: usize) { return Result.err(error); }
+                case Result.err(let copy_error: text.Error) { return Result.err(copy_error); }
+            }
+        }
+    }
+}
+
+func editing_checks() -> Result<bool, text.Error> {
+    var value: text.Text = try(text.from_utf8(read "worker", 64));
+    let size: usize = try(text.replace(edit value, read "café"));
+    let expected: text.Text = try(text.from_utf8(read "café", 64));
+    if (size != 5 || !text.equal_text(read value, read expected)) { return Result.ok(false); }
+    if (!text.equal_text(read value, read value)) { return Result.ok(false); }
+    let empty_length: usize = try(text.clear(edit value));
+    if (empty_length != 0 || text.scalar_length(read value) != 0) { return Result.ok(false); }
+    let reused_length: usize = try(text.append(edit value, read "ready"));
+    return Result.ok(reused_length == 5 && !text.equal_text(read value, read expected));
+}
+
+func test_replace_clear_and_compare() -> bool {
+    match (editing_checks()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+export func text_replace(initial: read u8[], replacement: read u8[], limit: usize, output: edit u8[]) -> Result<usize, text.Error> {
+    var value: text.Text = try(text.from_utf8(read initial, limit));
+    match (text.replace(edit value, read replacement)) {
+        case Result.ok(let count: usize) { return text.copy_into(read value, edit output); }
+        case Result.err(let error: text.Error) {
+            match (text.copy_into(read value, edit output)) {
+                case Result.ok(let count: usize) { return Result.err(error); }
+                case Result.err(let copy_error: text.Error) { return Result.err(copy_error); }
+            }
+        }
+    }
+}
+
+export func text_reuse(output: edit u8[]) -> Result<usize, text.Error> {
+    var value: text.Text = try(text.from_utf8(read "abcdef", 6));
+    let cleared: usize = try(text.clear(edit value));
+    let replaced: usize = try(text.replace(edit value, read "xy"));
+    let appended: usize = try(text.append(edit value, read "1234"));
+    return text.copy_into(read value, edit output);
+}
+
+export func text_order(left_bytes: read u8[], right_bytes: read u8[]) -> Result<i32, text.Error> {
+    let left_limit: usize = left_bytes.len;
+    let right_limit: usize = right_bytes.len;
+    let left: text.Text = try(text.from_utf8(read left_bytes, left_limit));
+    let right: text.Text = try(text.from_utf8(read right_bytes, right_limit));
+    let same: bool = text.equal_text(read left, read right);
+    match (text.compare_text(read left, read right)) {
+        case text.Order.less {
+            if (same) { return Result.err(text.Error.invalid_state); }
+            return Result.ok(-1);
+        }
+        case text.Order.equal {
+            if (!same) { return Result.err(text.Error.invalid_state); }
+            return Result.ok(0);
+        }
+        case text.Order.greater {
+            if (same) { return Result.err(text.Error.invalid_state); }
+            return Result.ok(1);
+        }
+    }
+}
+
+func slicing_checks() -> Result<bool, text.Error> {
+    let value: text.Text = try(text.from_utf8(read "Aé€😀Z", 11));
+    for (var start: usize = 0; start <= 12; start += 1) {
+        for (var end: usize = 0; end <= 12; end += 1) {
+            let start_valid: bool = start == 0 || start == 1 || start == 3 ||
+                                      start == 6 || start == 10 || start == 11;
+            let end_valid: bool = end == 0 || end == 1 || end == 3 ||
+                                    end == 6 || end == 10 || end == 11;
+            var output: u8[12] = [165; 12];
+            match (text.slice_into(read value, start, end, edit output)) {
+                case Result.ok(let length: usize) {
+                    if (!start_valid || !end_valid || start > end || length != end - start) {
+                        return Result.ok(false);
+                    }
+                    let source: u8[11] = [65, 195, 169, 226, 130, 172, 240, 159, 152, 128, 90];
+                    for (var index: usize = 0; index < length; index += 1) {
+                        if (output[index] != source[start + index]) { return Result.ok(false); }
+                    }
+                    if (output[length] != 165) { return Result.ok(false); }
+                }
+                case Result.err(let error: text.Error) {
+                    if (error != text.Error.invalid_range ||
+                        (start_valid && end_valid && start <= end)) { return Result.ok(false); }
+                    for (var index: usize = 0; index < 12; index += 1) {
+                        if (output[index] != 165) { return Result.ok(false); }
+                    }
+                }
+            }
+        }
+    }
+    var small: u8[1] = [165];
+    match (text.slice_into(read value, 1, 3, edit small)) {
+        case Result.ok(let length: usize) { return Result.ok(false); }
+        case Result.err(let error: text.Error) {
+            return Result.ok(error == text.Error.output_too_small && small[0] == 165);
+        }
+    }
+}
+
+func test_scalar_slices() -> bool {
+    match (slicing_checks()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func searching_checks() -> Result<bool, text.Error> {
+    let value: text.Text = try(text.from_utf8(read "café café", 11));
+    let first: usize = try(text.find(read value, "café"));
+    let scalar: usize = try(text.find(read value, "é"));
+    let empty: usize = try(text.find(read value, ""));
+    if (first != 0 || scalar != 3 || empty != 0) { return Result.ok(false); }
+    match (text.find(read value, "cafeteria")) {
+        case Result.ok(let offset: usize) { return Result.ok(false); }
+        case Result.err(let error: text.Error) {
+            if (error != text.Error.not_found) { return Result.ok(false); }
+        }
+    }
+    let nul: u8[3] = [65, 0, 66];
+    let binary: text.Text = try(text.from_utf8(read nul, 3));
+    let last: usize = try(text.find(read binary, "B"));
+    let blank: text.Text = try(text.from_utf8(read "", 0));
+    let beginning: usize = try(text.find(read blank, ""));
+    return Result.ok(last == 2 && beginning == 0);
+}
+
+func test_text_search() -> bool {
+    match (searching_checks()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}
+
+func truncation_checks() -> Result<bool, text.Error> {
+    var value: text.Text = try(text.from_utf8(read "Aé€😀Z", 11));
+    for (var length: usize = 0; length <= 12; length += 1) {
+        if (length == 0 || length == 1 || length == 3 || length == 6 || length == 10 || length == 11) {
+            continue;
+        }
+        match (text.truncate(edit value, length)) {
+            case Result.ok(let size: usize) { return Result.ok(false); }
+            case Result.err(let error: text.Error) {
+                if (error != text.Error.invalid_range || text.length(read value) != 11) {
+                    return Result.ok(false);
+                }
+            }
+        }
+    }
+    let size: usize = try(text.truncate(edit value, 3));
+    let expected: text.Text = try(text.from_utf8(read "Aé", 3));
+    if (size != 3 || !text.equal_text(read value, read expected)) { return Result.ok(false); }
+    let cleared: usize = try(text.truncate(edit value, 0));
+    let reused: usize = try(text.append(edit value, read "reused"));
+    return Result.ok(cleared == 0 && reused == 6);
+}
+
+func test_text_truncation() -> bool {
+    match (truncation_checks()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: text.Error) { return false; }
+    }
+}

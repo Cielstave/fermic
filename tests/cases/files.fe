@@ -1,0 +1,163 @@
+use std.fs;
+use std.mem;
+
+func opened(path: read u8[]) -> Result<fs.File, fs.Error> {
+    return fs.open_read(read path);
+}
+func forwarded(result: Result<fs.File, fs.Error>) -> Result<fs.File, fs.Error> {
+    return move(result);
+}
+func read_once(file: edit fs.File, output: edit u8[]) -> Result<usize, fs.Error> {
+    return fs.read_into(edit file, edit output);
+}
+export func first(path: read u8[], output: edit u8[]) -> Result<usize, fs.Error> {
+    match (forwarded(opened(read path))) {
+        case Result.ok(let owner: fs.File) {
+            var file: fs.File = move(owner);
+            return read_once(edit file, edit output);
+        }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+export func close_file(path: read u8[]) -> Result<void, fs.Error> {
+    match (opened(read path)) {
+        case Result.ok(let file: fs.File) { return fs.close(move(file)); }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+export func local_fault(path: read u8[], output: edit u8[], index: usize) -> Result<usize, fs.Error> {
+    match (opened(read path)) {
+        case Result.ok(let file: fs.File) {
+            output[index] = 7;
+            return Result.ok(1);
+        }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+func consume(file: fs.File, value: u8) -> usize { return widen<usize>(value); }
+export func late_fault(path: read u8[], input: read u8[], index: usize) -> Result<usize, fs.Error> {
+    match (opened(read path)) {
+        case Result.ok(let file: fs.File) { return Result.ok(consume(move(file), input[index])); }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+func checked_return(file: fs.File, divisor: usize) -> fs.File {
+    let checked: usize = 1 / divisor;
+    return move(file);
+}
+export func return_transfer(path: read u8[], divisor: usize) -> Result<usize, fs.Error> {
+    match (opened(read path)) {
+        case Result.ok(let file: fs.File) {
+            let returned: fs.File = checked_return(move(file), divisor);
+            return Result.ok(1);
+        }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+export func replace(path: read u8[]) -> Result<usize, fs.Error> {
+    match (opened(read path)) {
+        case Result.ok(let first: fs.File) {
+            var file: fs.File = move(first);
+            match (opened(read path)) {
+                case Result.ok(let second: fs.File) { file = move(second); }
+                case Result.err(let error: fs.Error) { return Result.err(error); }
+            }
+            return Result.ok(2);
+        }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}
+export func scopes(path: read u8[]) -> Result<usize, fs.Error> {
+    for (var index: usize = 0; index < 8; index += 1) {
+        match (opened(read path)) {
+            case Result.ok(let outer: fs.File) {
+                match (opened(read path)) {
+                    case Result.ok(let inner: fs.File) {}
+                    case Result.err(let error: fs.Error) { return Result.err(error); }
+                }
+            }
+            case Result.err(let error: fs.Error) { return Result.err(error); }
+        }
+    }
+    return Result.ok(8);
+}
+export func mixed(path: read u8[], fail: bool) -> usize {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var bytes: Buffer<u8> = move(allocation);
+            match (opened(read path)) {
+                case Result.ok(let file: fs.File) {
+                    if (fail) { let index: usize = bytes.len; bytes[index] = 1; }
+                    return 1;
+                }
+                case Result.err(let error: fs.Error) { return 98; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return 99; }
+    }
+}
+
+func accept_result(result: Result<fs.File, fs.Error>, value: u8) -> usize {
+    match (result) {
+        case Result.ok(let file: fs.File) { return widen<usize>(value); }
+        case Result.err(let error: fs.Error) { return 99; }
+    }
+}
+export func pending_result(path: read u8[], input: read u8[], index: usize) -> usize {
+    return accept_result(opened(read path), input[index]);
+}
+
+export func jump_cleanup(path: read u8[], mode: usize) -> usize {
+    match (opened(read path)) {
+        case Result.ok(let outer_file: fs.File) {
+            match (mem.bytes(8, 8)) {
+                case Result.ok(let outer_buffer: Buffer<u8>) {
+                    var visits: usize = 0;
+                    for (var i: usize = 0; i < 3; i += 1) {
+                        match (mem.bytes(4, 4)) {
+                            case Result.ok(let buffer: Buffer<u8>) {
+                                match (opened(read path)) {
+                                    case Result.ok(let first: fs.File) {
+                                        {
+                                            match (opened(read path)) {
+                                                case Result.ok(let second: fs.File) {
+                                                    visits += 1;
+                                                    if (mode == 0) { continue; }
+                                                    if (mode == 1) { break; }
+                                                    if (mode == 2) {
+                                                        let bytes: u8[1] = [0];
+                                                        let invalid: u8 = bytes[mode];
+                                                    }
+                                                }
+                                                case Result.err(let error: fs.Error) { continue; }
+                                            }
+                                        }
+                                    }
+                                    case Result.err(let error: fs.Error) { break; }
+                                }
+                            }
+                            case Result.err(let error: mem.Error) { break; }
+                        }
+                    }
+                    return visits;
+                }
+                case Result.err(let error: mem.Error) { return 88; }
+            }
+        }
+        case Result.err(let error: fs.Error) { return 99; }
+    }
+}
+
+export func init_cleanup(skip: bool) -> usize {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let initial: Buffer<u8>) {
+            var index: usize = 0;
+            for (var buffer: Buffer<u8> = move(initial); index < 8; index += buffer.len) {
+                if (skip) { continue; }
+                break;
+            }
+            return index;
+        }
+        case Result.err(let error: mem.Error) { return 99; }
+    }
+}

@@ -1,0 +1,86 @@
+use "model.fe";
+use "catalog.fe";
+use "members.fe";
+use "circulation.fe";
+use "reservations.fe";
+
+func dispatch(state: edit model.State, command: read model.Command) -> Result<void, model.Reason> {
+    match (command.operation) {
+        case model.Operation.add_book {
+            return catalog.add(edit state, command.first, command.second);
+        }
+        case model.Operation.add_member {
+            return members.add(edit state, command.first, command.second);
+        }
+        case model.Operation.borrow_book {
+            return circulation.checkout(edit state, command.first, command.second, command.third);
+        }
+        case model.Operation.return_book {
+            return circulation.checkin(edit state, command.first, command.second);
+        }
+        case model.Operation.reserve {
+            return reservations.place(edit state, command.first, command.second);
+        }
+        case model.Operation.cancel {
+            return reservations.cancel(edit state, command.first, command.second);
+        }
+        case model.Operation.advance {
+            if (command.first == 0 || command.first > 3650 || command.first > 1000000 - state.day) {
+                return Result.err(model.Reason.invalid_argument);
+            }
+            state.day += command.first;
+            return Result.ok();
+        }
+        case model.Operation.restock {
+            return catalog.restock(edit state, command.first, command.second);
+        }
+        case model.Operation.remove {
+            return catalog.remove(edit state, command.first, command.second);
+        }
+        case model.Operation.block {
+            return members.block(edit state, command.first);
+        }
+        case model.Operation.unblock {
+            return members.unblock(edit state, command.first);
+        }
+        case model.Operation.pay {
+            return members.pay(edit state, command.first, command.second);
+        }
+        case model.Operation.renew {
+            return circulation.renew(edit state, command.first, command.second, command.third);
+        }
+        case model.Operation.set_limit {
+            return members.set_limit(edit state, command.first, command.second);
+        }
+        case model.Operation.lose {
+            return circulation.lose(edit state, command.first, command.second);
+        }
+        case model.Operation.retire {
+            return catalog.retire(edit state, command.first);
+        }
+        case model.Operation.close_member {
+            return members.close(edit state, command.first);
+        }
+    }
+}
+
+@effects()
+pub func apply(state: edit model.State, command: read model.Command) -> void {
+    var reason: model.Reason = model.Reason.accepted;
+    match (dispatch(edit state, read command)) {
+        case Result.ok() {
+            state.counters.accepted += 1;
+        }
+        case Result.err(let error: model.Reason) {
+            reason = error;
+            state.counters.rejected += 1;
+        }
+    }
+    state.sequence += 1;
+    let sequence: usize = state.sequence;
+    let day: usize = state.day;
+    let slot: usize = (sequence - 1) % state.audit.len;
+    state.audit[slot] = model.Audit(sequence = sequence, day = day, operation = command.operation,
+                                   first = command.first, second = command.second,
+                                   third = command.third, reason = reason);
+}

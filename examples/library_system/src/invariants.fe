@@ -1,0 +1,127 @@
+use "model.fe";
+
+@effects()
+pub func valid(state: read model.State) -> bool {
+    if (state.day > 1000000 || state.sequence != state.counters.accepted + state.counters.rejected) {
+        return false;
+    }
+    var loans: usize = 0;
+    var holds: usize = 0;
+    var balance: usize = 0;
+    for (var index: usize = 0; index < state.books.len; index += 1) {
+        if (state.books[index].active) {
+            if (state.books[index].id == 0 || state.books[index].id > 1000000 || state.books[index].total > 1000) {
+                return false;
+            }
+            var borrowed: usize = 0;
+            for (var slot: usize = 0; slot < state.loans.len; slot += 1) {
+                if (state.loans[slot].active && state.loans[slot].book == index) {
+                    borrowed += 1;
+                }
+            }
+            if (state.books[index].available + borrowed != state.books[index].total) {
+                return false;
+            }
+            for (var other: usize = index + 1; other < state.books.len; other += 1) {
+                if (state.books[other].active && state.books[other].id == state.books[index].id) {
+                    return false;
+                }
+            }
+        }
+    }
+    for (var index: usize = 0; index < state.members.len; index += 1) {
+        if (state.members[index].active) {
+            if (state.members[index].id == 0 || state.members[index].id > 1000000 ||
+                state.members[index].limit == 0 || state.members[index].limit > 8 ||
+                state.members[index].balance > 1000000000) {
+                return false;
+            }
+            var borrowed: usize = 0;
+            var reserved: usize = 0;
+            for (var slot: usize = 0; slot < state.loans.len; slot += 1) {
+                if (state.loans[slot].active && state.loans[slot].member == index) {
+                    borrowed += 1;
+                }
+            }
+            for (var slot: usize = 0; slot < state.holds.len; slot += 1) {
+                if (state.holds[slot].active && state.holds[slot].member == index) {
+                    reserved += 1;
+                }
+            }
+            if (borrowed != state.members[index].borrowed || borrowed > state.members[index].limit || reserved > 4) {
+                return false;
+            }
+            balance += state.members[index].balance;
+            for (var other: usize = index + 1; other < state.members.len; other += 1) {
+                if (state.members[other].active && state.members[other].id == state.members[index].id) {
+                    return false;
+                }
+            }
+        }
+    }
+    for (var index: usize = 0; index < state.loans.len; index += 1) {
+        if (state.loans[index].active) {
+            let member: usize = state.loans[index].member;
+            let book: usize = state.loans[index].book;
+            if (member >= state.members.len || book >= state.books.len) {
+                return false;
+            }
+            if (!state.members[member].active || !state.books[book].active ||
+                state.loans[index].due == 0 || state.loans[index].due > 1000000 || state.loans[index].renewals > 2) {
+                return false;
+            }
+            for (var other: usize = index + 1; other < state.loans.len; other += 1) {
+                if (state.loans[other].active && state.loans[other].member == member && state.loans[other].book == book) {
+                    return false;
+                }
+            }
+            loans += 1;
+        }
+    }
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (state.holds[index].active) {
+            let member: usize = state.holds[index].member;
+            let book: usize = state.holds[index].book;
+            if (member >= state.members.len || book >= state.books.len) {
+                return false;
+            }
+            if (!state.members[member].active || !state.books[book].active ||
+                state.holds[index].ticket == 0 || state.holds[index].ticket > state.ticket) {
+                return false;
+            }
+            for (var loan: usize = 0; loan < state.loans.len; loan += 1) {
+                if (state.loans[loan].active && state.loans[loan].member == member && state.loans[loan].book == book) {
+                    return false;
+                }
+            }
+            for (var other: usize = index + 1; other < state.holds.len; other += 1) {
+                if (state.holds[other].active && (state.holds[other].ticket == state.holds[index].ticket ||
+                    (state.holds[other].member == member && state.holds[other].book == book))) {
+                    return false;
+                }
+            }
+            holds += 1;
+        }
+    }
+    if (state.counters.borrowed != state.counters.returned + state.counters.lost + loans) {
+        return false;
+    }
+    if (state.counters.reserved != state.counters.cancelled + state.counters.fulfilled + holds) {
+        return false;
+    }
+    if (state.counters.fees != state.counters.paid + balance || state.ticket != state.counters.reserved) {
+        return false;
+    }
+    var count: usize = state.sequence;
+    if (count > state.audit.len) {
+        count = state.audit.len;
+    }
+    let first: usize = state.sequence - count;
+    for (var offset: usize = 0; offset < count; offset += 1) {
+        let slot: usize = (first + offset) % state.audit.len;
+        if (state.audit[slot].sequence != first + offset + 1 || state.audit[slot].day > state.day) {
+            return false;
+        }
+    }
+    return true;
+}

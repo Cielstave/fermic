@@ -1,0 +1,27 @@
+pub enum Error { output_too_small, invalid_index, }
+
+@effects()
+pub func fill<T: data>(output: edit T[], value: T) -> void {
+    for (var index: usize = 0; index < output.len; index += 1) {
+        output[index] = copy(value);
+    }
+}
+
+// Output length is checked before any element changes.
+@effects()
+pub func copy_into<T: data>(input: read T[], output: edit T[]) -> Result<usize, Error> {
+    if (output.len < input.len) { return Result.err(Error.output_too_small); }
+    for (var index: usize = 0; index < input.len; index += 1) {
+        output[index] = copy(input[index]);
+    }
+    return Result.ok(input.len);
+}
+
+@effects()
+pub func swap<T: data>(values: edit T[], left: usize, right: usize) -> Result<void, Error> {
+    if (left >= values.len || right >= values.len) { return Result.err(Error.invalid_index); }
+    let saved: T = copy(values[left]);
+    values[left] = copy(values[right]);
+    values[right] = copy(saved);
+    return Result.ok();
+}

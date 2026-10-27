@@ -1,0 +1,40 @@
+use signed;
+use std.bits;
+use std.io;
+
+@effects()
+func test_signed_operations() -> bool {
+    return signed.negate<i8>(-7) == 7
+        && signed.negate<i64>(12) == -12
+        && signed.sign<i16>(-32768) == -1
+        && signed.sign<i32>(0) == 0
+        && signed.sign<i64>(9223372036854775807) == 1;
+}
+
+@effects()
+func test_flag_updates() -> bool {
+    let initial: u16 = 1;
+    let enabled: u16 = bits.set<u16>(initial, 4);
+    let cleared: u16 = bits.clear<u16>(enabled, 1);
+    return bits.has_all<u16>(enabled, 5)
+        && bits.has_any<u16>(cleared, 4)
+        && !bits.has_any<u16>(cleared, 1)
+        && bits.toggle<u16>(cleared, 4) == 0;
+}
+
+@effects()
+func test_high_bit() -> bool {
+    let mask: u64 = 9223372036854775808;
+    return bits.set<u64>(1, mask) == 9223372036854775809
+        && bits.clear<u64>(18446744073709551615, mask) == 9223372036854775807;
+}
+
+@effects(io.write)
+func main() -> i32 {
+    if (!test_signed_operations() || !test_flag_updates() || !test_high_bit()) {
+        io.println(read "integer-domains: checks failed");
+        return 1;
+    }
+    io.println(read "integer-domains: checks passed");
+    return 0;
+}

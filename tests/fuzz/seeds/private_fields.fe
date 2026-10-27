@@ -1,0 +1,7 @@
+pub struct Record { private bytes: Buffer<u8>; value: usize; }
+struct Compatible { private: u8; }
+func value(record: read Record) -> usize { return record.bytes.len + record.value; }
+func local() -> u8 {
+    let record: Compatible = Compatible(private = 7);
+    return record.private;
+}

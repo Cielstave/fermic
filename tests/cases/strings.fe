@@ -1,0 +1,102 @@
+use std.text;
+
+struct Service {
+    name: str;
+}
+
+enum Error { unavailable, }
+
+func service_name() -> str { return "Fermi"; }
+func echo(value: str) -> str { return value; }
+func available() -> Result<str, Error> { return Result.ok("ready"); }
+
+func test_static_lifetime() -> bool {
+    let value: str = echo(service_name());
+    return text.equal(value, "Fermi");
+}
+
+func test_binding_replacement() -> bool {
+    var value: str = "first";
+    value = "second";
+    return text.equal(value, "second");
+}
+
+func test_unicode() -> bool {
+    let value: str = "café 😀";
+    return value.len == 10 && text.scalar_count(value) == 6;
+}
+
+func test_empty() -> bool {
+    let value: str = "";
+    return value.len == 0 && text.scalar_count(value) == 0 && text.equal(value, "");
+}
+
+func test_content_equality() -> bool {
+    return text.equal("same", echo("same")) && !text.equal("same", "sand") &&
+           !text.equal("same", "sam") && !text.equal("é", "é");
+}
+
+func test_struct_field() -> bool {
+    let service: Service = Service(name = "worker");
+    return text.equal(service.name, "worker");
+}
+
+func test_result_payload() -> bool {
+    match (available()) {
+        case Result.ok(let value: str) { return text.equal(value, "ready"); }
+        case Result.err(let error: Error) { return false; }
+    }
+}
+
+func test_prefixes() -> bool {
+    return text.starts_with("/jobs/42", "/jobs/") &&
+           text.starts_with("café", "caf") && text.starts_with("😀 worker", "😀") &&
+           text.starts_with("", "") && text.starts_with("worker", "") &&
+           !text.starts_with("", "worker") && !text.starts_with("job", "jobs") &&
+           !text.starts_with("worker", "workeR");
+}
+
+func test_suffixes() -> bool {
+    return text.ends_with("report.json", ".json") && text.ends_with("café", "é") &&
+           text.ends_with("worker 😀", "😀") && text.ends_with("", "") &&
+           text.ends_with("worker", "") && !text.ends_with("", "worker") &&
+           !text.ends_with("job", "jobs") && !text.ends_with("worker", "Worker");
+}
+
+func test_text_order() -> bool {
+    return text.compare("", "") == text.Order.equal &&
+           text.compare("", "a") == text.Order.less &&
+           text.compare("a", "") == text.Order.greater &&
+           text.compare("job", "jobs") == text.Order.less &&
+           text.compare("jobs", "job") == text.Order.greater &&
+           text.compare("aZ", "aa") == text.Order.less &&
+           text.compare("café", "café") == text.Order.equal &&
+           text.compare("é", "😀") == text.Order.less &&
+           text.compare("😀", "é") == text.Order.greater;
+}
+
+func test_byte_indexing() -> bool {
+    let value: str = "Aé😀";
+    let expected: u8[7] = [65, 195, 169, 240, 159, 152, 128];
+    for (var index: usize = 0; index < value.len; index += 1) {
+        if (value[index] != expected[index]) { return false; }
+    }
+    return service_name()[0] == 70;
+}
+
+func test_field_and_array_indexing() -> bool {
+    var service: Service = Service(name = "worker");
+    service.name = "ready";
+    let names: str[2] = ["first", "é"];
+    return service.name[4] == 121 && names[1][0] == 195 && names[1][1] == 169;
+}
+
+export func string_byte(index: usize) -> u8 {
+    let value: str = "Aé😀";
+    return value[index];
+}
+
+export func empty_string_byte(index: usize) -> u8 {
+    let value: str = "";
+    return value[index];
+}

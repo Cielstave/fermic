@@ -1,0 +1,171 @@
+use "model.fe";
+
+pub enum Error {
+    syntax,
+    unknown_command,
+    number_limit,
+    word_limit,
+    arguments,
+}
+
+pub enum Event {
+    pending,
+    command(model.Command),
+}
+
+pub struct Decoder {
+    word: u8[12];
+    word_length: usize;
+    arguments: usize[3];
+    count: usize;
+    current: usize;
+    digits: usize;
+    in_arguments: bool;
+    operation: model.Operation;
+    line: usize;
+}
+
+pub func initial() -> Decoder {
+    return Decoder(word = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], word_length = 0,
+                   arguments = [0, 0, 0], count = 0, current = 0, digits = 0,
+                   in_arguments = false, operation = model.Operation.add_book, line = 1);
+}
+
+func equal(left: read u8[], right: read u8[]) -> bool {
+    if (left.len != right.len) {
+        return false;
+    }
+    for (var index: usize = 0; index < left.len; index += 1) {
+        if (left[index] != right[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+func operation(word: read u8[]) -> Result<model.Operation, Error> {
+    if (equal(read word, read "BOOK")) { return Result.ok(model.Operation.add_book); }
+    if (equal(read word, read "MEMBER")) { return Result.ok(model.Operation.add_member); }
+    if (equal(read word, read "BORROW")) { return Result.ok(model.Operation.borrow_book); }
+    if (equal(read word, read "RETURN")) { return Result.ok(model.Operation.return_book); }
+    if (equal(read word, read "HOLD")) { return Result.ok(model.Operation.reserve); }
+    if (equal(read word, read "CANCEL")) { return Result.ok(model.Operation.cancel); }
+    if (equal(read word, read "TICK")) { return Result.ok(model.Operation.advance); }
+    if (equal(read word, read "RESTOCK")) { return Result.ok(model.Operation.restock); }
+    if (equal(read word, read "REMOVE")) { return Result.ok(model.Operation.remove); }
+    if (equal(read word, read "BLOCK")) { return Result.ok(model.Operation.block); }
+    if (equal(read word, read "UNBLOCK")) { return Result.ok(model.Operation.unblock); }
+    if (equal(read word, read "PAY")) { return Result.ok(model.Operation.pay); }
+    if (equal(read word, read "RENEW")) { return Result.ok(model.Operation.renew); }
+    if (equal(read word, read "LIMIT")) { return Result.ok(model.Operation.set_limit); }
+    if (equal(read word, read "LOSS")) { return Result.ok(model.Operation.lose); }
+    if (equal(read word, read "RETIRE")) { return Result.ok(model.Operation.retire); }
+    if (equal(read word, read "CLOSE")) { return Result.ok(model.Operation.close_member); }
+    return Result.err(Error.unknown_command);
+}
+
+func arity(value: model.Operation) -> usize {
+    if (value == model.Operation.advance || value == model.Operation.block ||
+        value == model.Operation.unblock || value == model.Operation.retire || value == model.Operation.close_member) {
+        return 1;
+    }
+    if (value == model.Operation.borrow_book || value == model.Operation.renew) {
+        return 3;
+    }
+    return 2;
+}
+
+pub func code(value: model.Operation) -> usize {
+    match (value) {
+        case model.Operation.add_book { return 1; }
+        case model.Operation.add_member { return 2; }
+        case model.Operation.borrow_book { return 3; }
+        case model.Operation.return_book { return 4; }
+        case model.Operation.reserve { return 5; }
+        case model.Operation.cancel { return 6; }
+        case model.Operation.advance { return 7; }
+        case model.Operation.restock { return 8; }
+        case model.Operation.remove { return 9; }
+        case model.Operation.block { return 10; }
+        case model.Operation.unblock { return 11; }
+        case model.Operation.pay { return 12; }
+        case model.Operation.renew { return 13; }
+        case model.Operation.set_limit { return 14; }
+        case model.Operation.lose { return 15; }
+        case model.Operation.retire { return 16; }
+        case model.Operation.close_member { return 17; }
+    }
+}
+
+pub func feed(parser: edit Decoder, byte: u8) -> Result<Event, Error> {
+    if (!parser.in_arguments) {
+        if (byte == 10 && parser.word_length == 0) {
+            parser.line += 1;
+            return Result.ok(Event.pending);
+        }
+        if (byte == 32) {
+            if (parser.word_length == 0) {
+                return Result.err(Error.syntax);
+            }
+            let length: usize = parser.word_length;
+            let selected: model.Operation = try(operation(read parser.word[0..length]));
+            parser.operation = selected;
+            parser.in_arguments = true;
+            return Result.ok(Event.pending);
+        }
+        if (byte < 65 || byte > 90) {
+            return Result.err(Error.syntax);
+        }
+        if (parser.word_length == parser.word.len) {
+            return Result.err(Error.word_limit);
+        }
+        let index: usize = parser.word_length;
+        parser.word[index] = byte;
+        parser.word_length += 1;
+        return Result.ok(Event.pending);
+    }
+    if (byte >= 48 && byte <= 57) {
+        let digit: usize = widen<usize>(byte - 48);
+        if (parser.current > (1000000 - digit) / 10) {
+            return Result.err(Error.number_limit);
+        }
+        parser.current = parser.current * 10 + digit;
+        parser.digits += 1;
+        return Result.ok(Event.pending);
+    }
+    if (byte != 32 && byte != 10) {
+        return Result.err(Error.syntax);
+    }
+    if (parser.digits == 0 || parser.count == parser.arguments.len) {
+        return Result.err(Error.arguments);
+    }
+    let index: usize = parser.count;
+    parser.arguments[index] = parser.current;
+    parser.count += 1;
+    parser.current = 0;
+    parser.digits = 0;
+    let expected: usize = arity(parser.operation);
+    if (byte == 32) {
+        if (parser.count >= expected) {
+            return Result.err(Error.arguments);
+        }
+        return Result.ok(Event.pending);
+    }
+    if (parser.count != expected) {
+        return Result.err(Error.arguments);
+    }
+    let command: model.Command = model.Command(operation = parser.operation, first = parser.arguments[0],
+                                                second = parser.arguments[1], third = parser.arguments[2]);
+    parser.word_length = 0;
+    parser.count = 0;
+    parser.arguments[0] = 0;
+    parser.arguments[1] = 0;
+    parser.arguments[2] = 0;
+    parser.in_arguments = false;
+    parser.line += 1;
+    return Result.ok(Event.command(move(command)));
+}
+
+pub func complete(parser: read Decoder) -> bool {
+    return !parser.in_arguments && parser.word_length == 0;
+}

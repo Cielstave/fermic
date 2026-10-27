@@ -1,0 +1,71 @@
+use "decoder.fe";
+use "book.fe";
+use "report.fe";
+use std.fs;
+use std.io;
+
+pub enum Error { read_failed, invalid_input, input_limit, }
+
+pub func process(stock: edit book.Book, file: edit fs.File) -> Result<void, Error> {
+    var parser: decoder.Decoder = decoder.initial();
+    var bytes: u8[32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var total: usize = 0;
+    while (true) {
+        match (fs.read_into(edit file, edit bytes)) {
+            case Result.ok(let length: usize) {
+                if (length == 0) { break; }
+                if (length > 65536 - total) { return Result.err(Error.input_limit); }
+                total += length;
+                for (var index: usize = 0; index < length; index += 1) {
+                    match (decoder.feed(edit parser, bytes[index])) {
+                        case Result.ok(let event: decoder.Event) {
+                            match (move(event)) {
+                                case decoder.Event.pending {}
+                                case decoder.Event.command(let command: decoder.Command) {
+                                    book.apply(edit stock, read command);
+                                }
+                            }
+                        }
+                        case Result.err(let error: decoder.Error) { return Result.err(Error.invalid_input); }
+                    }
+                }
+            }
+            case Result.err(let error: fs.Error) { return Result.err(Error.read_failed); }
+        }
+    }
+    if (!decoder.complete(read parser)) { return Result.err(Error.invalid_input); }
+    return Result.ok();
+}
+
+func fail(message: read u8[], status: i32) -> i32 {
+    match (io.write_stderr(read message)) {
+        case Result.ok(let count: usize) { return status; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}
+
+pub func execute(source: read u8[], destination: read u8[]) -> i32 {
+    match (fs.open_read(read source)) {
+        case Result.ok(let file: fs.File) {
+            var input: fs.File = move(file);
+            var stock: book.Book = book.empty();
+            match (process(edit stock, edit input)) {
+                case Result.ok() {}
+                case Result.err(let error: Error) {
+                    if (error == Error.read_failed) { return fail(read "ledger: input read failed\n", 74); }
+                    return fail(read "ledger: invalid or oversized input\n", 65);
+                }
+            }
+            match (fs.close(move(input))) {
+                case Result.ok() {}
+                case Result.err(let error: fs.Error) { return fail(read "ledger: input close failed\n", 74); }
+            }
+            match (report.save(read stock, read destination)) {
+                case Result.ok() { return 0; }
+                case Result.err(let error: fs.Error) { return fail(read "ledger: report write failed\n", 74); }
+            }
+        }
+        case Result.err(let error: fs.Error) { return fail(read "ledger: input open failed\n", 74); }
+    }
+}

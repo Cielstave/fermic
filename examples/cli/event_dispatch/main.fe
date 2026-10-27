@@ -1,0 +1,25 @@
+use std.io;
+use jobs;
+
+func dispatch(command: jobs.Command) -> void {
+    match (command) {
+        case jobs.Command.submit(let job: jobs.Job) {
+            if (job.id == 0) {
+                io.println("Job rejected: identifier must be nonzero.");
+            } else if (job.priority > 3) {
+                io.println("Job rejected: priority exceeds the configured range.");
+            } else {
+                io.println("Job accepted.");
+            }
+        }
+        case jobs.Command.stop {
+            io.println("Worker stopped.");
+        }
+    }
+}
+
+func main() -> void {
+    let job: jobs.Job = jobs.Job(id = 42, priority = 1);
+    dispatch(jobs.Command.submit(move(job)));
+    dispatch(jobs.Command.stop);
+}

@@ -1,0 +1,14 @@
+@effects()
+func classify<T: integer>(value: T) -> u8 {
+    match (value) {
+        case 0 { return 1; }
+        case 1 { return 2; }
+        case _ { return 3; }
+    }
+}
+func flag(value: bool) -> u8 {
+    match (value) {
+        case true { return classify<u16>(1); }
+        case false { return classify<i8>(-1); }
+    }
+}

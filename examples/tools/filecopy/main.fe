@@ -1,0 +1,82 @@
+use std.args;
+use std.fs;
+use std.io;
+use std.mem;
+
+func report(message: read u8[], status: i32) -> i32 {
+    match (io.write_stderr(read message)) {
+        case Result.ok(let count: usize) { return status; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}
+
+func copy_bytes(input: edit fs.File, output: edit fs.File, buffer: edit u8[]) -> Result<void, fs.Error> {
+    var total: usize = 0;
+    while (true) {
+        let count: usize = try(fs.read_into(edit input, edit buffer));
+        if (count == 0) { return Result.ok(); }
+        if (count > 8388608 - total) { return Result.err(fs.Error.invalid_argument); }
+        try(fs.write_all(edit output, read buffer[0..count]));
+        total += count;
+    }
+    return Result.ok();
+}
+
+func transfer(source: read u8[], destination: read u8[], buffer: edit u8[]) -> Result<void, fs.Error> {
+    var input: fs.File = try(fs.open_read(read source));
+    var output: fs.File = try(fs.create_new(read destination));
+    try(copy_bytes(edit input, edit output, edit buffer));
+    try(fs.sync(edit output));
+    try(fs.close(move(input)));
+    return fs.close(move(output));
+}
+
+func open_paths(source: edit u8[], destination: edit u8[], buffer: edit u8[]) -> i32 {
+    match (args.read_into(0, edit source)) {
+        case Result.ok(let source_length: usize) {
+            match (args.read_into(1, edit destination)) {
+                case Result.ok(let destination_length: usize) {
+                    match (transfer(read source[0..source_length], read destination[0..destination_length], edit buffer)) {
+                        case Result.ok() { return 0; }
+                        case Result.err(let error: fs.Error) {
+                            if (error == fs.Error.invalid_argument) {
+                                return report(read "filecopy: input exceeds the 8 MiB limit\n", 65);
+                            }
+                            return report(read "filecopy: file operation failed; output may be incomplete\n", 74);
+                        }
+                    }
+                }
+                case Result.err(let error: args.Error) {
+                    return report(read "filecopy: destination argument exceeds 4096 bytes\n", 64);
+                }
+            }
+        }
+        case Result.err(let error: args.Error) {
+            return report(read "filecopy: source argument exceeds 4096 bytes\n", 64);
+        }
+    }
+}
+
+func run() -> Result<i32, mem.Error> {
+    var source: Buffer<u8> = try(mem.bytes(4096, 4096));
+    var destination: Buffer<u8> = try(mem.bytes(4096, 4096));
+    var buffer: Buffer<u8> = try(mem.bytes(4096, 4096));
+    return Result.ok(open_paths(edit source, edit destination, edit buffer));
+}
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 2) { return report(read "usage: filecopy SOURCE DESTINATION\n", 64); }
+        }
+        case Result.err(let error: args.Error) {
+            return report(read "filecopy: process arguments are unavailable\n", 71);
+        }
+    }
+    match (run()) {
+        case Result.ok(let status: i32) { return status; }
+        case Result.err(let error: mem.Error) {
+            return report(read "filecopy: cannot allocate transfer buffers\n", 71);
+        }
+    }
+}

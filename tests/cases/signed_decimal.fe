@@ -1,0 +1,22 @@
+use std.num;
+use std.fmt;
+
+@budget(work = 3000, heap = 0)
+export func signed_parse64(bytes: read u8[]) -> Result<i64, num.Error> {
+    return num.parse_i64(read bytes);
+}
+
+@budget(work = 4000, heap = 0)
+export func signed_parse32(bytes: read u8[]) -> Result<i32, num.Error> {
+    return num.parse_i32(read bytes);
+}
+
+@budget(work = 4000, heap = 0)
+export func signed_format64(value: i64, output: edit u8[]) -> Result<usize, fmt.Error> {
+    return fmt.i64_into(value, edit output);
+}
+
+@budget(work = 5000, heap = 0)
+export func signed_format32(value: i32, output: edit u8[]) -> Result<usize, fmt.Error> {
+    return fmt.i32_into(value, edit output);
+}

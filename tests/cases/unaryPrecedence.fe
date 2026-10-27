@@ -1,0 +1,34 @@
+func testNegationBeforeAddition() -> bool {
+    let a: i32 = 5;
+    let b: i32 = 2;
+    return -a + b == -3 && -(a + b) == -7;
+}
+
+func testNegationBeforeSubtraction() -> bool {
+    let a: i32 = 5;
+    let b: i32 = 2;
+    return -a - b == -7 && a - -b == 7;
+}
+
+func testComplementBeforeShift() -> bool {
+    let a: u8 = 1;
+    return ~a << 1 == 252 && ~(a << 1) == 253;
+}
+
+func testPositiveBeforeArithmetic() -> bool {
+    let a: i32 = 5;
+    let b: i32 = 2;
+    return +a - b == 3 && -+a + b == -3;
+}
+
+func testNotBeforeEquality() -> bool {
+    let a: bool = true;
+    let b: bool = false;
+    return !a == b && !!a == a;
+}
+
+func testNegationBeforeProduct() -> bool {
+    let a: i32 = 5;
+    let b: i32 = 2;
+    return -a * b + 3 == -7;
+}

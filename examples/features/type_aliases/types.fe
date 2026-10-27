@@ -1,0 +1,10 @@
+pub type Count = usize;
+pub type ServiceName = str;
+
+struct Summary {
+    completed: Count;
+    service: ServiceName;
+}
+
+// A public alias deliberately exposes this record under its API name.
+pub type Report = Summary;

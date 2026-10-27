@@ -1,0 +1,11 @@
+use std.io;
+
+func write_status() -> void {
+    io.println(read "status=ready");
+}
+
+// Expected E_EFFECT: a helper cannot add io.write to an empty effect contract.
+@effects()
+func main() -> void {
+    write_status();
+}

@@ -1,0 +1,14 @@
+use packets;
+use std.mem;
+use std.io;
+
+func main() -> i32 {
+    match (packets.create(1)) {
+        case Result.ok(let packet: packets.Packet) {
+            if (packet.sequence != 1) { return 2; }
+            io.print(read packet.payload);
+            return 0;
+        }
+        case Result.err(let error: mem.Error) { return 1; }
+    }
+}

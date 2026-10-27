@@ -1,0 +1,80 @@
+enum Error { rejected, }
+struct Pair { left: u8; right: u8; }
+enum Event { stop, count(u8), pair(Pair), bytes(u8[2]), }
+enum Envelope { empty, event(Event), }
+
+func make(kind: u8, value: u8) -> Event {
+    if (kind == 0) { return Event.stop; }
+    if (kind == 1) { return Event.count(value); }
+    if (kind == 2) { return Event.pair(Pair(left = value, right = 3)); }
+    return Event.bytes([value, 5]);
+}
+
+@budget(work = 1000, heap = 0)
+func inspect(event: Event) -> u16 {
+    match (event) {
+        case Event.bytes(let bytes: u8[2]) { return widen<u16>(bytes[0]) + widen<u16>(bytes[1]); }
+        case Event.stop { return 0; }
+        case Event.pair(let pair: Pair) { return widen<u16>(pair.left) + widen<u16>(pair.right); }
+        case Event.count(let value: u8) { return widen<u16>(value); }
+    }
+}
+
+@budget(work = 5000, heap = 0)
+export func dispatch(kind: u8, value: u8) -> u16 { return inspect(make(kind, value)); }
+
+export func duplicated(kind: u8, value: u8) -> u16 {
+    let event: Event = make(kind, value);
+    let first: u16 = inspect(copy(event));
+    let second: u16 = inspect(move(event));
+    return first + second;
+}
+
+func wrap(kind: u8, value: u8, accepted: bool) -> Result<Envelope, Error> {
+    if (!accepted) { return Result.err(Error.rejected); }
+    return Result.ok(Envelope.event(make(kind, value)));
+}
+
+export func unpack(kind: u8, value: u8, accepted: bool) -> Result<u16, Error> {
+    let envelope: Envelope = try(wrap(kind, value, accepted));
+    match (envelope) {
+        case Envelope.empty { return Result.ok(900); }
+        case Envelope.event(let event: Event) { return Result.ok(inspect(move(event))); }
+    }
+}
+
+export func replaced(kind: u8, value: u8) -> u16 {
+    var event: Event = Event.stop;
+    event = make(kind, value);
+    return inspect(move(event));
+}
+
+export func branched(kind: u8, value: u8) -> u16 {
+    var count: u16;
+    match (make(kind, value)) {
+        case Event.stop { count = 0; }
+        case Event.count(let value: u8) { count = widen<u16>(value); }
+        case Event.pair(let pair: Pair) { count = widen<u16>(pair.left) + 3; }
+        case Event.bytes(let bytes: u8[2]) { count = widen<u16>(bytes[0]) + 5; }
+    }
+    return count;
+}
+
+func observed(marker: edit u8[]) -> Event {
+    marker[0] += 1;
+    return Event.count(marker[0]);
+}
+
+export func once(marker: edit u8[]) -> u16 {
+    match (observed(edit marker)) {
+        case Event.stop { return 0; }
+        case Event.count(let count: u8) { return widen<u16>(count); }
+        case Event.pair(let pair: Pair) { return 3; }
+        case Event.bytes(let bytes: u8[2]) { return 5; }
+    }
+}
+
+export func stored(value: u8) -> u16 {
+    let events: Event[2] = [Event.count(value), Event.stop];
+    return inspect(copy(events[0]));
+}

@@ -1,0 +1,42 @@
+use std.buffer;
+use std.io;
+
+struct Sample { id: usize; source: str; }
+
+@effects()
+@budget(work = 32, heap = 0)
+func resetBatch(batch: edit Buffer<Sample>) -> Result<usize, buffer.Error> {
+    return buffer.clear<Sample>(edit batch);
+}
+
+func processBatches() -> Result<bool, buffer.Error> {
+    let width: usize = buffer.element_size<Sample>();
+    var batch: Buffer<Sample> = try(buffer.empty<Sample>(width * 8));
+    let capacity: usize = try(buffer.reserve<Sample>(edit batch, 8));
+    var checksum: usize = 0;
+    for (var round: usize = 0; round < 16; round += 1) {
+        let cleared: usize = try(resetBatch(edit batch));
+        for (var index: usize = 0; index < 8; index += 1) {
+            let length: usize = try(buffer.push<Sample>(edit batch,
+                Sample(id = round * 8 + index, source = "sensor")));
+        }
+        for (var index: usize = 0; index < batch.len; index += 1) {
+            checksum += batch[index].id;
+        }
+        if (batch.capacity != capacity) { return Result.ok(false); }
+    }
+    return Result.ok(checksum == 8128);
+}
+
+func main() -> i32 {
+    match (processBatches()) {
+        case Result.ok(let valid: bool) {
+            if (valid) {
+                io.println("Processed 128 records using reusable storage.");
+                return 0;
+            }
+            return 1;
+        }
+        case Result.err(let error: buffer.Error) { return 1; }
+    }
+}

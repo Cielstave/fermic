@@ -1,0 +1,124 @@
+use std.text;
+
+struct Counter { value: usize; }
+struct Entry { bytes: u8[2]; count: usize; }
+enum Error { invalid, }
+enum Event { idle, ready(usize), }
+type Bytes = u8[4];
+
+func next(counter: edit Counter) -> usize {
+    counter.value += 1;
+    return counter.value;
+}
+
+func test_scalar_initializers() -> bool {
+    let zeros: u8[256] = [0; 256];
+    let flags: bool[4] = [true; 4];
+    let negative: i64[3] = [-9_223_372_036_854_775_808; 3];
+    for (var index: usize = 0; index < zeros.len; index += 1) {
+        if (zeros[index] != 0) { return false; }
+    }
+    return flags[3] && negative[2] == -9_223_372_036_854_775_808;
+}
+
+func test_single_evaluation() -> bool {
+    var counter: Counter = Counter(value = 0);
+    let values: usize[8] = [next(edit counter); 8];
+    for (var index: usize = 0; index < values.len; index += 1) {
+        if (values[index] != 1) { return false; }
+    }
+    return counter.value == 1;
+}
+
+func test_independent_elements() -> bool {
+    let seed: Entry = Entry(bytes = [3; 2], count = 7);
+    var records: Entry[3] = [copy(seed); 3];
+    records[0].bytes[0] = 99;
+    records[0].count = 12;
+    return records[1].bytes[0] == 3 && records[2].count == 7 && seed.bytes[0] == 3;
+}
+
+func test_nested_arrays() -> bool {
+    var rows: Bytes[3] = [[5; 4]; 3];
+    rows[0][1] = 9;
+    return rows[1][1] == 5 && rows[2][3] == 5;
+}
+
+func test_static_text() -> bool {
+    let names: str[3] = ["café"; 3];
+    return text.equal(names[0], "café") && text.equal(names[2], "café");
+}
+
+func test_move_consumed_once() -> bool {
+    var source: Entry = Entry(bytes = [6; 2], count = 8);
+    let values: Entry[4] = [move(source); 4];
+    source = Entry(bytes = [2; 2], count = 1);
+    return values[0].count == 8 && values[3].bytes[1] == 6 && source.count == 1;
+}
+
+func fail() -> Result<usize, Error> { return Result.err(Error.invalid); }
+
+func construct() -> Result<usize, Error> {
+    let values: usize[4] = [try(fail()); 4];
+    return Result.ok(values[0]);
+}
+
+func test_error_propagation() -> bool {
+    match (construct()) {
+        case Result.ok(let value: usize) { return false; }
+        case Result.err(let error: Error) { return error == Error.invalid; }
+    }
+}
+
+func event_value(event: Event) -> usize {
+    match (move(event)) {
+        case Event.idle { return 0; }
+        case Event.ready(let value: usize) { return value; }
+    }
+}
+
+func test_payload_enum() -> bool {
+    let events: Event[4] = [Event.ready(17); 4];
+    return event_value(copy(events[0])) == 17 && event_value(copy(events[3])) == 17;
+}
+
+@budget(work = 1000, heap = 0)
+func bounded() -> usize {
+    let values: usize[32] = [7; 32];
+    return values[31];
+}
+
+func seed_work() -> usize {
+    var total: usize = 0;
+    for (var index: usize = 0; index < 32; index += 1) { total += index; }
+    return total;
+}
+
+@budget(work = 5000, heap = 0)
+func once_bounded() -> usize {
+    let values: usize[32] = [seed_work(); 32];
+    return values[31];
+}
+
+func test_static_budget() -> bool { return bounded() == 7 && once_bounded() == 496; }
+
+func test_maximum_length() -> bool {
+    var bytes: u8[65536] = [255; 65536];
+    bytes[65535] = 1;
+    return bytes[0] == 255 && bytes[65534] == 255 && bytes[65535] == 1;
+}
+
+func identity<T: integer>(value: T) -> T {
+    let values: T[3] = [value; 3];
+    return values[2];
+}
+
+func test_integer_specialization() -> bool {
+    return identity<i32>(-123) == -123 && identity<u64>(18_446_744_073_709_551_615) == 18_446_744_073_709_551_615;
+}
+
+func test_comma_arrays_unchanged() -> bool {
+    var counter: Counter = Counter(value = 0);
+    let values: usize[3] = [next(edit counter), next(edit counter), next(edit counter)];
+    return counter.value == 3 && values[0] == 1 && values[1] == 2 && values[2] == 3;
+}

@@ -1,0 +1,14 @@
+struct Row { id: usize; name: str; }
+enum Token { none, row(Row), }
+func duplicate<T: data>(value: T) -> T { return copy(value); }
+func exchange<T: data>(values: edit T[]) -> void {
+    let first: T = copy(values[0]);
+    values[0] = copy(values[1]);
+    values[1] = copy(first);
+}
+func f() -> usize {
+    var rows: Row[2] = [Row(id = 1, name = "one"), Row(id = 2, name = "two")];
+    exchange<Row>(edit rows);
+    let value: Row = duplicate<Row>(copy(rows[0]));
+    return value.id;
+}

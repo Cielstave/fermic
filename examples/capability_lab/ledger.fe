@@ -1,0 +1,64 @@
+use "stock_ledger/runner.fe";
+use "stock_ledger/decoder.fe";
+use "stock_ledger/book.fe";
+use std.args;
+use std.io;
+use std.mem;
+
+func run() -> Result<i32, mem.Error> {
+    var source: Buffer<u8> = try(mem.bytes(4096, 4096));
+    var destination: Buffer<u8> = try(mem.bytes(4096, 4096));
+    match (args.read_into(0, edit source)) {
+        case Result.ok(let source_length: usize) {
+            match (args.read_into(1, edit destination)) {
+                case Result.ok(let destination_length: usize) {
+                    return Result.ok(runner.execute(read source[0..source_length], read destination[0..destination_length]));
+                }
+                case Result.err(let error: args.Error) { return Result.ok(64); }
+            }
+        }
+        case Result.err(let error: args.Error) { return Result.ok(64); }
+    }
+}
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 2) { io.println("usage: ledger INPUT OUTPUT"); return 64; }
+        }
+        case Result.err(let error: args.Error) { return 71; }
+    }
+    match (run()) {
+        case Result.ok(let status: i32) { return status; }
+        case Result.err(let error: mem.Error) { return 71; }
+    }
+}
+
+func test_decoder_lifecycle() -> bool {
+    var parser: decoder.Decoder = decoder.initial();
+    var stock: book.Book = book.empty();
+    let bytes: u8[7] = [43, 32, 50, 32, 51, 48, 10];
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        match (decoder.feed(edit parser, bytes[index])) {
+            case Result.ok(let event: decoder.Event) {
+                match (move(event)) {
+                    case decoder.Event.pending {}
+                    case decoder.Event.command(let command: decoder.Command) { book.apply(edit stock, read command); }
+                }
+            }
+            case Result.err(let error: decoder.Error) { return false; }
+        }
+    }
+    return decoder.complete(read parser) && stock.items[2].quantity == 30 && stock.accepted == 1;
+}
+
+func test_stock_rejections() -> bool {
+    var stock: book.Book = book.empty();
+    let first: decoder.Command = decoder.Command(operation = decoder.Operation.add, item = 0, amount = 10);
+    let second: decoder.Command = decoder.Command(operation = decoder.Operation.take, item = 0, amount = 11);
+    let third: decoder.Command = decoder.Command(operation = decoder.Operation.add, item = 20, amount = 1);
+    book.apply(edit stock, read first);
+    book.apply(edit stock, read second);
+    book.apply(edit stock, read third);
+    return stock.items[0].quantity == 10 && stock.accepted == 1 && stock.rejected == 2;
+}

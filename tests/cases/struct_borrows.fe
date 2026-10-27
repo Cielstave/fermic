@@ -1,0 +1,130 @@
+use std.mem;
+
+struct Counter { value: u32; samples: u8[3]; }
+struct State { counter: Counter; name: str; }
+struct Packet { bytes: Buffer<u8>; code: u32; }
+
+@effects()
+func value(counter: read Counter) -> u32 { return counter.value; }
+
+@effects()
+func add(counter: edit Counter, amount: u32) -> void {
+    counter.value += amount;
+    counter.samples[1] += 1;
+}
+
+@effects()
+func forward(counter: edit Counter) -> u32 {
+    add(edit counter, 3);
+    return value(read counter);
+}
+
+@effects()
+func pair(left: read Counter, right: read Counter) -> bool {
+    return left.value == right.value;
+}
+
+@effects()
+func update(state: edit State) -> void {
+    add(edit state.counter, 4);
+    state.name = "updated";
+}
+
+func test_shared_borrow() -> bool {
+    let counter: Counter = Counter(value = 7, samples = [1, 2, 3]);
+    return value(read counter) == 7 && pair(read counter, read counter);
+}
+
+func test_edit_reborrow() -> bool {
+    var counter: Counter = Counter(value = 7, samples = [1, 2, 3]);
+    let result: u32 = forward(edit counter);
+    return result == 10 && counter.value == 10 && counter.samples[1] == 3;
+}
+
+func test_nested_field() -> bool {
+    var state: State = State(counter = Counter(value = 1, samples = [0, 0, 0]), name = "initial");
+    update(edit state);
+    return value(read state.counter) == 5 && state.name.len == 7;
+}
+
+func test_array_element() -> bool {
+    var counters: Counter[2] = [Counter(value = 1, samples = [0, 0, 0]),
+                               Counter(value = 2, samples = [0, 0, 0])];
+    add(edit counters[1], 5);
+    return value(read counters[0]) == 1 && value(read counters[1]) == 7;
+}
+
+func packet_length(packet: read Packet) -> usize { return packet.bytes.len; }
+
+func grow(packet: edit Packet) -> Result<usize, mem.Error> {
+    packet.code += 1;
+    return mem.resize(edit packet.bytes, 8);
+}
+
+func test_resource_fields() -> bool {
+    match (mem.from_bytes(read "data", 16)) {
+        case Result.ok(let bytes: Buffer<u8>) {
+            var packet: Packet = Packet(bytes = move(bytes), code = 1);
+            if (packet_length(read packet) != 4) { return false; }
+            match (grow(edit packet)) {
+                case Result.ok(let length: usize) {
+                    return length == 8 && packet_length(read packet) == 8 && packet.code == 2;
+                }
+                case Result.err(let error: mem.Error) { return false; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return false; }
+    }
+}
+
+func copy_counter(state: read State) -> Counter { return copy(state.counter); }
+func second(counter: read Counter) -> u8 { return counter.samples[1]; }
+
+func test_read_nested_copy() -> bool {
+    let state: State = State(counter = Counter(value = 9, samples = [1, 7, 3]), name = "ready");
+    let counter: Counter = copy_counter(read state);
+    return second(read counter) == 7 && counter.value == 9;
+}
+
+func replace(packet: edit Packet, bytes: Buffer<u8>) -> void {
+    packet.bytes = move(bytes);
+}
+
+func test_resource_replacement() -> bool {
+    match (mem.from_bytes(read "old", 16)) {
+        case Result.ok(let old: Buffer<u8>) {
+            var packet: Packet = Packet(bytes = move(old), code = 0);
+            match (mem.from_bytes(read "replacement", 16)) {
+                case Result.ok(let next: Buffer<u8>) {
+                    replace(edit packet, move(next));
+                    return packet_length(read packet) == 11;
+                }
+                case Result.err(let error: mem.Error) { return false; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return false; }
+    }
+}
+
+struct Counters { values: Counter[1]; }
+
+func first_byte(bytes: read u8[]) -> u8 { return bytes[0]; }
+func set_byte(bytes: edit u8[]) -> void { bytes[0] = 42; }
+func sample_slice(counter: read Counter) -> u8 { return first_byte(read counter.samples[0..1]); }
+func nested_slice(state: read State) -> u8 { return first_byte(read state.counter.samples[1..3]); }
+func array_slice(counters: read Counters) -> u8 { return first_byte(read counters.values[0].samples[1..3]); }
+
+func test_shared_array_slices() -> bool {
+    let state: State = State(counter = Counter(value = 0, samples = [7, 9, 11]), name = "sample");
+    let counters: Counters = Counters(values = [Counter(value = 0, samples = [7, 9, 11])]);
+    return sample_slice(read state.counter) == 7 && nested_slice(read state) == 9 &&
+           array_slice(read counters) == 9;
+}
+
+func edit_slice(counter: edit Counter) -> void { set_byte(edit counter.samples[1..2]); }
+
+func test_edit_array_slice() -> bool {
+    var counter: Counter = Counter(value = 0, samples = [7, 9, 11]);
+    edit_slice(edit counter);
+    return counter.samples[0] == 7 && counter.samples[1] == 42 && counter.samples[2] == 11;
+}

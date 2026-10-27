@@ -1,0 +1,26 @@
+use std.io;
+use std.text;
+
+func extract() -> Result<usize, text.Error> {
+    var message: text.Text = try(text.from_utf8(read "worker: café ready", 64));
+    let start: usize = try(text.find(read message, "café"));
+    var output: u8[32] = [0; 32];
+    let count: usize = try(text.slice_into(read message, start, start + 5, edit output));
+    io.println(read output[0..count]);
+    let length: usize = try(text.truncate(edit message, start + 5));
+    let copied: usize = try(text.copy_into(read message, edit output));
+    io.println(read output[0..copied]);
+    return Result.ok(length);
+}
+
+func main() -> i32 {
+    match (extract()) {
+        case Result.ok(let length: usize) { return 0; }
+        case Result.err(let error: text.Error) {
+            match (io.write_stderr(read "text_ranges: text operation failed\n")) {
+                case Result.ok(let count: usize) { return 1; }
+                case Result.err(let output_error: io.Error) { return 1; }
+            }
+        }
+    }
+}

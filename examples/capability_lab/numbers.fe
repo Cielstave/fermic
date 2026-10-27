@@ -1,0 +1,60 @@
+use "common/output.fe";
+use std.io;
+
+func gcd(left: usize, right: usize) -> usize {
+    var a: usize = left;
+    var b: usize = right;
+    while (b != 0) {
+        let remainder: usize = a % b;
+        a = b;
+        b = remainder;
+    }
+    return a;
+}
+
+func prime(value: usize) -> bool {
+    if (value < 2) { return false; }
+    var divisor: usize = 2;
+    while (divisor <= value / divisor) {
+        if (value % divisor == 0) { return false; }
+        divisor += 1;
+    }
+    return true;
+}
+
+func prime_count(limit: usize) -> usize {
+    var count: usize = 0;
+    for (var value: usize = 0; value < limit; value += 1) {
+        if (prime(value)) { count += 1; }
+    }
+    return count;
+}
+
+func test_numbers() -> bool {
+    return gcd(84, 30) == 6 && gcd(0, 0) == 0 && gcd(0, 9) == 9 &&
+           prime_count(100) == 25 && !prime(1) && prime(97) && !prime(99);
+}
+
+func main() -> i32 {
+    io.print("primes-below-100=");
+    if (!output.number(prime_count(100))) { return 1; }
+    io.print(" gcd-84-30=");
+    if (!output.number(gcd(84, 30))) { return 1; }
+    io.println("");
+    return 0;
+}
+
+func test_gcd_exhaustive() -> bool {
+    for (var a: usize = 0; a < 32; a += 1) {
+        for (var b: usize = 0; b < 32; b += 1) {
+            var expected: usize = 0;
+            if (a != 0 || b != 0) {
+                for (var divisor: usize = 1; divisor < 32; divisor += 1) {
+                    if (a % divisor == 0 && b % divisor == 0) { expected = divisor; }
+                }
+            }
+            if (gcd(a, b) != expected) { return false; }
+        }
+    }
+    return true;
+}

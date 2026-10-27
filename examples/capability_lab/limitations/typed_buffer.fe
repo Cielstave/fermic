@@ -1,0 +1,3 @@
+// Intentionally rejected: resource-owning elements require element cleanup.
+struct Item { bytes: Buffer<u8>; }
+func length(values: Buffer<Item>) -> usize { return values.len; }

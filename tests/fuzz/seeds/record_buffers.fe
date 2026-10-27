@@ -1,0 +1,8 @@
+struct Row { id: usize; name: str; }
+struct Owner { rows: Buffer<Row>; }
+func item(rows: edit Buffer<Row>, index: usize) -> usize {
+    rows[index].id += 1;
+    return rows[index].id;
+}
+func view(rows: read Row[]) -> usize { return rows[0].id; }
+func inspect(owner: read Owner) -> usize { return view(read owner.rows); }

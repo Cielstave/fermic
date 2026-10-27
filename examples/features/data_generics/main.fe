@@ -1,0 +1,53 @@
+use std.slice;
+use std.io;
+
+struct Part { id: usize; name: str; }
+enum Kind { identifier, number, separator, }
+struct Token { kind: Kind; offset: usize; }
+
+func sort_parts(parts: edit Part[]) -> Result<void, slice.Error> {
+    for (var end: usize = parts.len; end > 1; end -= 1) {
+        for (var index: usize = 0; index + 1 < end; index += 1) {
+            if (parts[index].id > parts[index + 1].id) {
+                try(slice.swap<Part>(edit parts, index, index + 1));
+            }
+        }
+    }
+    return Result.ok();
+}
+
+func verify() -> Result<bool, slice.Error> {
+    let input: Part[3] = [Part(id = 30, name = "Valve"), Part(id = 10, name = "Bolt"), Part(id = 20, name = "Nut")];
+    var parts: Part[3] = [Part(id = 0, name = ""); 3];
+    let copied: usize = try(slice.copy_into<Part>(read input, edit parts));
+    try(sort_parts(edit parts));
+    if (copied != 3 || parts[0].id != 10 || parts[2].id != 30 || input[0].id != 30) {
+        return Result.ok(false);
+    }
+    var tokens: Token[3] = [Token(kind = Kind.separator, offset = 0); 3];
+    let seed: Token = Token(kind = Kind.identifier, offset = 4);
+    slice.fill<Token>(edit tokens, copy(seed));
+    tokens[2].kind = Kind.number;
+    tokens[2].offset = 12;
+    try(slice.swap<Token>(edit tokens, 0, 2));
+    return Result.ok(tokens[0].kind == Kind.number && tokens[0].offset == 12 &&
+                     tokens[1].kind == Kind.identifier && tokens[1].offset == 4);
+}
+
+func test_record_workloads() -> bool {
+    match (verify()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: slice.Error) { return false; }
+    }
+}
+
+func main() -> i32 {
+    if (test_record_workloads()) {
+        io.println(read "data-generics: inventory and token checks passed");
+        return 0;
+    }
+    match (io.write_stderr(read "data-generics: record verification failed\n")) {
+        case Result.ok(let count: usize) { return 1; }
+        case Result.err(let error: io.Error) { return 1; }
+    }
+}

@@ -1,0 +1,21 @@
+use std.fs;
+
+export func save(path: read u8[], input: read u8[]) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    try(fs.write_all(edit file, read input));
+    try(fs.sync(edit file));
+    return fs.close(move(file));
+}
+
+struct Output { file: fs.File; }
+export func save_owned(path: read u8[], input: read u8[]) -> Result<void, fs.Error> {
+    var output: Output = Output(file = try(fs.create_new(read path)));
+    try(fs.write_all(edit output.file, read input));
+    return fs.sync(edit output.file);
+}
+
+export func save_fault(path: read u8[], input: read u8[], index: usize) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    let byte: u8 = input[index];
+    return fs.write_all(edit file, read input);
+}

@@ -1,0 +1,123 @@
+use std.mem;
+
+enum Error { invalid, }
+
+@effects()
+@budget(work = 100, heap = 0)
+func larger<T: integer>(left: T, right: T) -> T {
+    if (left > right) {
+        return left;
+    }
+    return right;
+}
+
+@effects()
+func contains<T: integer>(input: read T[], expected: T) -> bool {
+    for (var index: usize = 0; index < input.len; index += 1) {
+        if (input[index] == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@effects()
+func fill<T: integer>(output: edit T[], value: T) -> void {
+    for (var index: usize = 0; index < output.len; index += 1) {
+        output[index] = value;
+    }
+}
+
+func nested<T: integer>(value: T) -> Result<Result<T, Error>, Error> {
+    return Result.ok(Result.ok(value));
+}
+
+func countdown<T: integer>(value: T) -> T {
+    if (value == 0) {
+        return value;
+    }
+    return countdown<T>(value - 1);
+}
+
+@effects(memory)
+func consume<T: integer>(buffer: Buffer<u8>, value: T) -> T {
+    return value;
+}
+
+func test_unsigned_widths() -> bool {
+    return larger<u8>(0, 255) == 255
+        && larger<u16>(0, 65535) == 65535
+        && larger<u32>(0, 4294967295) == 4294967295
+        && larger<u64>(0, 18446744073709551615) == 18446744073709551615
+        && larger<usize>(0, 18446744073709551615) == 18446744073709551615;
+}
+
+func test_signed_widths() -> bool {
+    return larger<i8>(-128, 127) == 127
+        && larger<i16>(-32768, 32767) == 32767
+        && larger<i32>(-2147483648, 2147483647) == 2147483647
+        && larger<i64>(-9223372036854775808, 9223372036854775807) == 9223372036854775807;
+}
+
+func test_byte_values() -> bool {
+    for (var index: usize = 0; index < 256; index += 1) {
+        match (narrow<u8>(index)) {
+            case Result.ok(let value: u8) {
+                if (larger<u8>(value, 0) != value || larger<u8>(255, value) != 255) {
+                    return false;
+                }
+            }
+            case Result.err(let error: CastError) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+func test_views() -> bool {
+    var values: i16[3] = [-7, 0, 12];
+    if (!contains<i16>(read values, -7) || contains<i16>(read values, 8)) {
+        return false;
+    }
+    fill<i16>(edit values, 8);
+    return values[0] == 8 && values[1] == 8 && values[2] == 8;
+}
+
+func test_empty_view() -> bool {
+    let values: u32[1] = [7];
+    return !contains<u32>(read values[0..0], 7);
+}
+
+func test_nested_results() -> bool {
+    match (nested<u64>(4294967296)) {
+        case Result.ok(let inner: Result<u64, Error>) {
+            match (inner) {
+                case Result.ok(let value: u64) {
+                    return value == 4294967296;
+                }
+                case Result.err(let error: Error) {
+                    return false;
+                }
+            }
+        }
+        case Result.err(let error: Error) {
+            return false;
+        }
+    }
+}
+
+func test_recursive_specialization() -> bool {
+    return countdown<u32>(4) == 0 && countdown<i16>(3) == 0;
+}
+
+func test_owned_parameter() -> bool {
+    match (mem.bytes(8, 8)) {
+        case Result.ok(let buffer: Buffer<u8>) {
+            return consume<u32>(move(buffer), 73) == 73;
+        }
+        case Result.err(let error: mem.Error) {
+            return false;
+        }
+    }
+}

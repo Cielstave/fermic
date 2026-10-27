@@ -1,0 +1,28 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.runtime;
+use backend.telemetry;
+use platform.app;
+use platform.config;
+use workers.maintenance;
+use workers.runner;
+
+func start() -> Result<void, backend.Failure> {
+    let settings: config.Settings = try config.load();
+    let application: app.App = try app.open(read settings);
+    let context: backend.Context = try runtime.process_context();
+    // Callbacks finish before application handles drop. Fatal failures cancel
+    // sibling workers; ordinary shutdown cancellation is a successful exit.
+    return runtime.workers(read application, read context, settings.worker_count,
+        runner.run, maintenance.run, 10_000);
+}
+
+func main() -> i32 {
+    match (start()) {
+        case Result.ok { return 0; }
+        case Result.err(let failure: backend.Failure) {
+            telemetry.failure_code("worker_stopped", failure.code);
+            return 1;
+        }
+    }
+}

@@ -1,0 +1,22 @@
+use std.io;
+use std.mem;
+
+func send(bytes: read u8[], line: bool) -> void {
+    if (line) { io.println(read bytes); }
+    else { io.print(read bytes); }
+}
+
+export func output(bytes: read u8[], line: bool, marker: edit u8[]) -> void {
+    match (mem.bytes(8, 8)) {
+        case Result.ok(let owner: Buffer<u8>) {
+            send(read bytes, line);
+            marker[0] = 1;
+        }
+        case Result.err(let error: mem.Error) { marker[0] = 2; }
+    }
+}
+
+export func literal() -> void {
+    io.print("A");
+    io.println("B");
+}

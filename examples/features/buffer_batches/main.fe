@@ -1,0 +1,36 @@
+use std.buffer;
+use std.fmt;
+use std.io;
+
+func total() -> Result<i64, buffer.Error> {
+    let initial: i64[3] = [12, -4, 9];
+    let batch: i64[2] = [3, 5];
+    var values: Buffer<i64> = try(buffer.from_slice<i64>(read initial, 40));
+    let length: usize = try(buffer.extend<i64>(edit values, read batch));
+    var sum: i64 = 0;
+    for (var index: usize = 0; index < length; index += 1) { sum += values[index]; }
+    return Result.ok(sum);
+}
+
+func failure() -> i32 {
+    match (io.write_stderr(read "buffer_batches: operation failed\n")) {
+        case Result.ok(let count: usize) { return 1; }
+        case Result.err(let error: io.Error) { return 1; }
+    }
+}
+
+func main() -> i32 {
+    match (total()) {
+        case Result.ok(let sum: i64) {
+            var output: u8[20] = [0; 20];
+            match (fmt.i64_into(sum, edit output)) {
+                case Result.ok(let length: usize) {
+                    io.println(read output[0..length]);
+                    return 0;
+                }
+                case Result.err(let error: fmt.Error) { return failure(); }
+            }
+        }
+        case Result.err(let error: buffer.Error) { return failure(); }
+    }
+}

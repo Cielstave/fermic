@@ -1,0 +1,32 @@
+use "book.fe";
+use std.fs;
+use std.fmt;
+
+func number(file: edit fs.File, value: usize) -> Result<void, fs.Error> {
+    var digits: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (fmt.usize_into(value, edit digits)) {
+        case Result.ok(let length: usize) { return fs.write_all(edit file, read digits[0..length]); }
+        case Result.err(let error: fmt.Error) { return Result.err(fs.Error.invalid_state); }
+    }
+}
+
+pub func save(stock: read book.Book, path: read u8[]) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    for (var index: usize = 0; index < stock.items.len; index += 1) {
+        try(fs.write_all(edit file, read "item "));
+        try(number(edit file, index));
+        try(fs.write_all(edit file, read " "));
+        let quantity: usize = widen<usize>(stock.items[index].quantity);
+        try(number(edit file, quantity));
+        try(fs.write_all(edit file, read "\n"));
+    }
+    try(fs.write_all(edit file, read "accepted "));
+    let accepted: usize = stock.accepted;
+    try(number(edit file, accepted));
+    try(fs.write_all(edit file, read "\nrejected "));
+    let rejected: usize = stock.rejected;
+    try(number(edit file, rejected));
+    try(fs.write_all(edit file, read "\n"));
+    try(fs.sync(edit file));
+    return fs.close(move(file));
+}

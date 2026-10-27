@@ -1,0 +1,10 @@
+use std.time;
+export func now() -> Result<usize, time.Error> { return time.monotonic_ns(); }
+@budget(work = 150, heap = 0)
+export func after(now: usize, duration: usize) -> Result<usize, time.Error> {
+    return time.deadline_after(now, duration);
+}
+@budget(work = 150, heap = 0)
+export func remaining(deadline: usize, now: usize) -> usize {
+    return time.remaining_ns(deadline, now);
+}

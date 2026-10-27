@@ -1,0 +1,50 @@
+use jobs;
+use std.io;
+use std.mem;
+
+@effects(memory)
+func execute() -> Result<jobs.Summary, mem.Error> {
+    let job: jobs.Job = try(jobs.create(7, read "payload"));
+    let event: jobs.Event = jobs.Event.received(move(job));
+    return Result.ok(jobs.process(move(event)));
+}
+
+@effects(memory)
+func test_owned_payload() -> bool {
+    match (execute()) {
+        case Result.ok(let summary: jobs.Summary) {
+            return summary.completed == 1 && summary.bytes == 7;
+        }
+        case Result.err(let error: mem.Error) {
+            return false;
+        }
+    }
+}
+
+@effects(memory)
+func test_idle_event() -> bool {
+    let summary: jobs.Summary = jobs.process(jobs.Event.idle);
+    return summary.completed == 0 && summary.bytes == 0;
+}
+
+@effects(memory)
+func test_payload_limit() -> bool {
+    match (jobs.create(9, read "01234567890123456789012345678901234567890123456789012345678901234")) {
+        case Result.ok(let job: jobs.Job) {
+            return false;
+        }
+        case Result.err(let error: mem.Error) {
+            return error == mem.Error.limit;
+        }
+    }
+}
+
+@effects(memory, io.write)
+func main() -> i32 {
+    if (!test_owned_payload() || !test_idle_event() || !test_payload_limit()) {
+        io.println(read "owned-jobs: processing failed");
+        return 1;
+    }
+    io.println(read "owned-jobs: ownership checks passed");
+    return 0;
+}

@@ -1,0 +1,48 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.queue;
+use backend.telemetry;
+use backend.time;
+use jobs.model;
+use platform.app;
+use storage.jobs;
+use workers.histogram;
+
+pub func execute(application: read app.App, lease: read model.Lease,
+    parent: read backend.Context) -> Result<void, backend.Failure> {
+    let context: backend.Context = try backend.child_context(read parent,
+        5000, 1_048_576, 100_000);
+    let result: model.Histogram = try histogram.compute(read lease.job.samples,
+        read context);
+    return jobs.complete(read application.database, read lease, read result);
+}
+
+pub func run(application: read app.App, context: read backend.Context)
+    -> Result<void, backend.Failure> {
+    while (!backend.cancelled(read context)) {
+        let claimed: backend.Option<model.Lease> = try jobs.claim(
+            read application.database, read context);
+        match (claimed) {
+            case Option.none {
+                try time.wait(read context, 200);
+            }
+            case Option.some(let lease: model.Lease) {
+                let outcome: Result<void, backend.Failure> = execute(
+                    read application, read lease, read context);
+                match (outcome) {
+                    case Result.ok {
+                        telemetry.increment("jobs_completed");
+                    }
+                    case Result.err(let failure: backend.Failure) {
+                        // Token-checked recovery distinguishes stale leases,
+                        // shutdown, permanent failure and retryable failure.
+                        try queue.recover(read application.database,
+                            read lease, read failure, 5, 60_000);
+                        telemetry.failure_code("job_attempt_failed", failure.code);
+                    }
+                }
+            }
+        }
+    }
+    return Result.ok();
+}

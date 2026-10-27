@@ -1,0 +1,2 @@
+// Intentionally rejected: f64 is not a supported type.
+func ratio(value: f64) -> f64 { return value; }

@@ -1,0 +1,23 @@
+use std.binary;
+use std.io;
+
+func main() -> i32 {
+    // A four-byte length followed by a small payload; no host layout dependency.
+    var frame: u8[8] = [0, 0, 0, 0, 70, 101, 114, 109];
+    match (binary.write_u32_be(4, edit frame[0..4])) {
+        case Result.ok(let written: usize) {}
+        case Result.err(let error: binary.Error) { return 65; }
+    }
+    match (binary.read_u32_be(read frame[0..4])) {
+        case Result.ok(let length: u32) {
+            if (widen<usize>(length) != frame.len - 4) {
+                return 65;
+            }
+        }
+        case Result.err(let error: binary.Error) { return 65; }
+    }
+    match (io.write(read "binary frame validated\n")) {
+        case Result.ok(let written: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}

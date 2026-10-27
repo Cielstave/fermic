@@ -1,0 +1,7 @@
+ITEM 20 4 1250 Buku café
+ITEM 10 8 250 Steel bolts
+IN 20 3
+OUT 10 2
+PRICE 20 1500
+ITEM 30 0 500 Spare washers
+DROP 30

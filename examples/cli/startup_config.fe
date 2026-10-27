@@ -1,0 +1,41 @@
+use std.config;
+use std.io;
+
+func reject(message: read u8[]) -> i32 {
+    match (io.write_stderr(read message)) {
+        case Result.ok(let written: usize) { return 78; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}
+
+func main() -> i32 {
+    var workers: usize;
+    match (config.usize_env(read "FERMI_WORKERS", 1, 32)) {
+        case Result.ok(let value: usize) { workers = value; }
+        case Result.err(let error: config.Error) {
+            return reject(read "fermi: FERMI_WORKERS must be a decimal integer in 1..32\n");
+        }
+    }
+    var job_bytes: usize;
+    match (config.usize_env(read "FERMI_JOB_BYTES", 1, 16_777_216)) {
+        case Result.ok(let value: usize) { job_bytes = value; }
+        case Result.err(let error: config.Error) {
+            return reject(read "fermi: FERMI_JOB_BYTES must be a decimal integer in 1..16777216\n");
+        }
+    }
+    var active_limit: usize;
+    match (config.usize_env(read "FERMI_ACTIVE_BYTES", 1, 536_870_912)) {
+        case Result.ok(let value: usize) { active_limit = value; }
+        case Result.err(let error: config.Error) {
+            return reject(read "fermi: FERMI_ACTIVE_BYTES must be a decimal integer in 1..536870912\n");
+        }
+    }
+    // All factors have bounded domains; this product fits usize on the pilot target.
+    if (workers * job_bytes > active_limit) {
+        return reject(read "fermi: active job payloads exceed FERMI_ACTIVE_BYTES\n");
+    }
+    match (io.write(read "startup configuration accepted\n")) {
+        case Result.ok(let written: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}

@@ -1,0 +1,22 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.http;
+use http.routes;
+use platform.app;
+use platform.config;
+
+pub func serve(application: read app.App, settings: read config.Settings,
+    context: read backend.Context) -> Result<void, backend.Failure> {
+    var router: http.Router<app.App> = try http.router<app.App>();
+    try routes.mount(edit router);
+    let limits: http.Limits = http.Limits {
+        max_connections: 1024,
+        max_in_flight: 128,
+        max_body_bytes: 262_144,
+        max_header_bytes: 16_384,
+        request_timeout_ms: 5000,
+    };
+    // Policy exposes stable codes and request IDs, never private causes.
+    return http.serve(read application, read settings.api, move(router),
+        read limits, read context, http.public_failure_policy());
+}

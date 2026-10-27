@@ -1,0 +1,16 @@
+// A standalone native program. Library I/O and CLI arguments follow in later stages.
+func sum(values: read i32[]) -> i32 {
+    var total: i32 = 0;
+    for (var i: usize = 0; i < values.len; i += 1) {
+        total += values[i];
+    }
+    return total;
+}
+
+func main() -> i32 {
+    let values: i32[4] = [1, 2, 3, 4];
+    if (sum(read values) == 10) {
+        return 0;
+    }
+    return 1;
+}

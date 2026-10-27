@@ -1,0 +1,16 @@
+pub enum Error {
+    syntax,
+    number,
+    name,
+    duplicate,
+    missing,
+    capacity,
+    quantity,
+    not_empty,
+    read_failed,
+    input_limit,
+    line_limit,
+    command_limit,
+    truncated,
+    invariant,
+}

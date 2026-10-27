@@ -1,0 +1,23 @@
+// Byte-buffer allocation. The limit bounds payload capacity, not process memory.
+pub enum Error {
+    no_memory,
+    size_overflow,
+    limit,
+    invalid_argument,
+    invalid_state,
+}
+
+pub native func bytes(length: usize, limit: usize) -> Result<Buffer<u8>, Error>;
+
+// Allocate independent storage. Failure leaves the borrowed source unchanged.
+pub func from_bytes(source: read u8[], limit: usize) -> Result<Buffer<u8>, Error> {
+    var buffer: Buffer<u8> = try(bytes(source.len, limit));
+    for (var index: usize = 0; index < source.len; index += 1) {
+        buffer[index] = source[index];
+    }
+    return Result.ok(move(buffer));
+}
+
+// Growth preserves the owner on failure. Reserve returns capacity; resize returns length.
+pub native func reserve(buffer: edit Buffer<u8>, capacity: usize) -> Result<usize, Error>;
+pub native func resize(buffer: edit Buffer<u8>, length: usize) -> Result<usize, Error>;

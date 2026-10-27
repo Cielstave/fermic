@@ -1,0 +1,26 @@
+use std.fmt;
+use std.io;
+
+pub func failure(message: read u8[], status: i32) -> i32 {
+    match (io.write_stderr(read message)) {
+        case Result.ok(let written: usize) { return status; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}
+
+pub func count(value: usize) -> i32 {
+    var output: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (fmt.usize_into(value, edit output)) {
+        case Result.ok(let length: usize) {
+            match (io.write(read output[0..length])) {
+                case Result.ok(let written: usize) {}
+                case Result.err(let error: io.Error) { return 74; }
+            }
+        }
+        case Result.err(let error: fmt.Error) { return 70; }
+    }
+    match (io.write(read "\n")) {
+        case Result.ok(let written: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}

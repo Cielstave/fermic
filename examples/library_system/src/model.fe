@@ -1,0 +1,151 @@
+pub enum Operation {
+    add_book,
+    add_member,
+    borrow_book,
+    return_book,
+    reserve,
+    cancel,
+    advance,
+    restock,
+    remove,
+    block,
+    unblock,
+    pay,
+    renew,
+    set_limit,
+    lose,
+    retire,
+    close_member,
+}
+
+pub enum Reason {
+    accepted,
+    invalid_argument,
+    duplicate,
+    missing_book,
+    missing_member,
+    full,
+    blocked,
+    debt,
+    loan_limit,
+    unavailable,
+    queue_priority,
+    missing_loan,
+    overdue,
+    renewal_limit,
+    missing_hold,
+    busy,
+}
+
+pub enum Slot {
+    none,
+    at(usize),
+}
+
+pub struct Command {
+    operation: Operation;
+    first: usize;
+    second: usize;
+    third: usize;
+}
+
+pub struct Book {
+    active: bool;
+    id: usize;
+    total: usize;
+    available: usize;
+    lost: usize;
+}
+
+pub struct Member {
+    active: bool;
+    id: usize;
+    limit: usize;
+    borrowed: usize;
+    blocked: bool;
+    balance: usize;
+}
+
+pub struct Loan {
+    active: bool;
+    member: usize;
+    book: usize;
+    due: usize;
+    renewals: usize;
+}
+
+pub struct Hold {
+    active: bool;
+    member: usize;
+    book: usize;
+    ticket: usize;
+}
+
+pub struct Audit {
+    sequence: usize;
+    day: usize;
+    operation: Operation;
+    first: usize;
+    second: usize;
+    third: usize;
+    reason: Reason;
+}
+
+pub struct Counters {
+    accepted: usize;
+    rejected: usize;
+    borrowed: usize;
+    returned: usize;
+    renewed: usize;
+    lost: usize;
+    reserved: usize;
+    cancelled: usize;
+    fulfilled: usize;
+    fees: usize;
+    paid: usize;
+}
+
+pub struct State {
+    day: usize;
+    sequence: usize;
+    ticket: usize;
+    books: Book[32];
+    members: Member[32];
+    loans: Loan[64];
+    holds: Hold[64];
+    audit: Audit[64];
+    counters: Counters;
+}
+
+func empty_book() -> Book {
+    return Book(active = false, id = 0, total = 0, available = 0, lost = 0);
+}
+
+func empty_member() -> Member {
+    return Member(active = false, id = 0, limit = 1, borrowed = 0, blocked = false, balance = 0);
+}
+
+func empty_loan() -> Loan {
+    return Loan(active = false, member = 0, book = 0, due = 0, renewals = 0);
+}
+
+func empty_hold() -> Hold {
+    return Hold(active = false, member = 0, book = 0, ticket = 0);
+}
+
+func empty_audit() -> Audit {
+    return Audit(sequence = 0, day = 0, operation = Operation.add_book,
+                 first = 0, second = 0, third = 0, reason = Reason.accepted);
+}
+
+pub func initial() -> State {
+    return State(day = 0, sequence = 0, ticket = 0,
+        books = [empty_book(); 32],
+        members = [empty_member(); 32],
+        loans = [empty_loan(); 64],
+        holds = [empty_hold(); 64],
+        audit = [empty_audit(); 64],
+        counters = Counters(accepted = 0, rejected = 0, borrowed = 0, returned = 0,
+                            renewed = 0, lost = 0, reserved = 0, cancelled = 0, fulfilled = 0,
+                            fees = 0, paid = 0));
+}

@@ -1,0 +1,17 @@
+enum Owner { bytes(Buffer<u8>), empty, }
+enum Envelope { owner(Owner), none, }
+func consume(owner: Owner) -> void {
+    match (owner) {
+        case Owner.bytes(let bytes: Buffer<u8>) {}
+        case Owner.empty {}
+    }
+}
+func unpack(envelope: Envelope) -> void {
+    match (envelope) {
+        case Envelope.owner(let owner: Owner) { consume(move(owner)); }
+        case Envelope.none {}
+    }
+}
+func forward(bytes: Buffer<u8>) -> void {
+    unpack(Envelope.owner(Owner.bytes(move(bytes))));
+}

@@ -1,0 +1,7 @@
+use std.fs;
+export func close_second(path: read u8[]) -> Result<void, fs.Error> {
+    match (fs.open_read(read path)) {
+        case Result.ok(let file: fs.File) { return fs.close(move(file)); }
+        case Result.err(let error: fs.Error) { return Result.err(error); }
+    }
+}

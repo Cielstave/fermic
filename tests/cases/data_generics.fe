@@ -1,0 +1,113 @@
+use std.slice;
+
+struct Row { id: usize; name: str; }
+enum Token { none, row(Row), code(u32), }
+enum Mode { idle, active, }
+type Pair = i16[2];
+
+func identity<T: data>(value: T) -> T { return copy(value); }
+func identifier<T: data>(value: read T) -> usize { return value.id; }
+
+func records() -> Result<bool, slice.Error> {
+    let input: Row[3] = [Row(id = 1, name = "first"), Row(id = 2, name = "café"), Row(id = 3, name = "last")];
+    var output: Row[4] = [Row(id = 99, name = "sentinel"); 4];
+    let length: usize = try(slice.copy_into<Row>(read input, edit output));
+    if (length != 3 || output[3].id != 99) { return Result.ok(false); }
+    try(slice.swap<Row>(edit output, 0, 2));
+    let selected: Row = identity<Row>(copy(output[0]));
+    if (identifier<Row>(read selected) != 3 || output[2].id != 1 || output[1].name[3] != 195) {
+        return Result.ok(false);
+    }
+    var seed: Row = Row(id = 7, name = "seed");
+    slice.fill<Row>(edit output, copy(seed));
+    seed.id = 8;
+    for (var index: usize = 0; index < output.len; index += 1) {
+        if (output[index].id != 7 || output[index].name[0] != 115) { return Result.ok(false); }
+    }
+    return Result.ok(true);
+}
+
+func test_record_algorithms() -> bool {
+    match (records()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: slice.Error) { return false; }
+    }
+}
+
+func scalars() -> Result<bool, slice.Error> {
+    var flags: bool[3] = [false; 3];
+    slice.fill<bool>(edit flags, true);
+    let text: str = identity<str>("café");
+    var names: str[2] = ["first", "second"];
+    try(slice.swap<str>(edit names, 0, 1));
+    var modes: Mode[2] = [Mode.idle, Mode.active];
+    try(slice.swap<Mode>(edit modes, 0, 1));
+    let number: i32 = identity<i32>(-17);
+    return Result.ok(flags[0] && flags[2] && text[3] == 195 && names[0][0] == 115 &&
+                     modes[0] == Mode.active && number == -17);
+}
+
+func test_scalar_algorithms() -> bool {
+    match (scalars()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: slice.Error) { return false; }
+    }
+}
+
+func pairs() -> Result<bool, slice.Error> {
+    var values: Pair[2] = [[1, 2], [-3, 4]];
+    try(slice.swap<Pair>(edit values, 0, 1));
+    let selected: Pair = identity<Pair>(copy(values[0]));
+    return Result.ok(selected[0] == -3 && selected[1] == 4 && values[1][0] == 1);
+}
+
+func test_array_elements() -> bool {
+    match (pairs()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: slice.Error) { return false; }
+    }
+}
+
+func tokens() -> Result<bool, slice.Error> {
+    var values: Token[3] = [Token.none, Token.row(Row(id = 11, name = "token")), Token.code(42)];
+    try(slice.swap<Token>(edit values, 0, 1));
+    let chosen: Token = identity<Token>(copy(values[0]));
+    match (copy(chosen)) {
+        case Token.none { return Result.ok(false); }
+        case Token.row(let row: Row) { return Result.ok(row.id == 11 && row.name[0] == 116); }
+        case Token.code(let code: u32) { return Result.ok(false); }
+    }
+}
+
+func test_payload_elements() -> bool {
+    match (tokens()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: slice.Error) { return false; }
+    }
+}
+
+func test_errors_preserve_output() -> bool {
+    let input: Row[2] = [Row(id = 1, name = "a"), Row(id = 2, name = "b")];
+    var output: Row[1] = [Row(id = 99, name = "sentinel")];
+    match (slice.copy_into<Row>(read input, edit output)) {
+        case Result.ok(let length: usize) { return false; }
+        case Result.err(let error: slice.Error) {
+            if (error != slice.Error.output_too_small || output[0].id != 99) { return false; }
+        }
+    }
+    match (slice.swap<Row>(edit output, 0, 18446744073709551615)) {
+        case Result.ok() { return false; }
+        case Result.err(let error: slice.Error) {
+            return error == slice.Error.invalid_index && output[0].id == 99 && output[0].name[0] == 115;
+        }
+    }
+}
+
+export func record_pipeline(seed: usize, index: usize) -> Result<usize, slice.Error> {
+    if (seed > 1000000) { return Result.err(slice.Error.invalid_index); }
+    var rows: Row[3] = [Row(id = seed, name = "a"), Row(id = seed + 1, name = "b"), Row(id = seed + 2, name = "c")];
+    var output: Row[4] = [Row(id = 99, name = "sentinel"); 4];
+    let length: usize = try(slice.copy_into<Row>(read rows, edit output));
+    try(slice.swap<Row>(edit output, 0, index));
+    return Result.ok(output[0].id * 10000000 + output[1].id + output[3].id);
+}

@@ -1,0 +1,39 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.database;
+use backend.queue;
+use jobs.model;
+
+pub func find(pool: read database.Pool, tenant: backend.Id,
+    job_id: backend.Id) -> Result<model.Job, backend.Failure> {
+    return database.one<model.Job>(read pool,
+        "SELECT tenant_id, job_id, state, samples, result FROM jobs WHERE tenant_id = $1 AND job_id = $2",
+        database.params(tenant, job_id), queue.job_decoder());
+}
+
+pub func insert(transaction: edit database.Transaction, tenant: backend.Id,
+    job_id: backend.Id, command: read model.Submit) -> Result<void, backend.Failure> {
+    try database.execute(edit transaction,
+        "INSERT INTO jobs (tenant_id, job_id, state, samples, attempts, available_at) VALUES ($1, $2, 'queued', $3, 0, CURRENT_TIMESTAMP)",
+        database.params(tenant, job_id, read command.samples));
+    return Result.ok();
+}
+
+pub func claim(pool: read database.Pool, context: read backend.Context)
+    -> Result<backend.Option<model.Lease>, backend.Failure> {
+    // Atomic claim with database time, a 30-second lease and five attempts.
+    return queue.claim<model.Lease>(read pool, read context, 30, 5,
+        queue.lease_decoder());
+}
+
+pub func complete(pool: read database.Pool, lease: read model.Lease,
+    result: read model.Histogram) -> Result<void, backend.Failure> {
+    // A stale or cancelled lease cannot publish a result.
+    return queue.finish(read pool, lease.job.tenant_id, lease.job.job_id,
+        lease.token, read result);
+}
+
+pub func cancel(pool: read database.Pool, tenant: backend.Id,
+    job_id: backend.Id) -> Result<model.Receipt, backend.Failure> {
+    return queue.cancel<model.Receipt>(read pool, tenant, job_id);
+}

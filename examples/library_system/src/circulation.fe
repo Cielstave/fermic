@@ -1,0 +1,120 @@
+use "model.fe";
+use "lookup.fe";
+
+func charge(state: edit model.State, member: usize, requested: usize) -> void {
+    let remaining: usize = 1000000000 - state.members[member].balance;
+    var amount: usize = requested;
+    if (amount > remaining) {
+        amount = remaining;
+    }
+    state.members[member].balance += amount;
+    state.counters.fees += amount;
+}
+
+pub func checkout(state: edit model.State, member_id: usize, book_id: usize, days: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    if (days == 0 || days > 365 || days > 1000000 - state.day) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    if (state.members[member].blocked) {
+        return Result.err(model.Reason.blocked);
+    }
+    if (state.members[member].balance != 0) {
+        return Result.err(model.Reason.debt);
+    }
+    match (lookup.loan(read state, member, book)) {
+        case Result.ok(let slot: usize) {
+            return Result.err(model.Reason.duplicate);
+        }
+        case Result.err(let error: model.Reason) {}
+    }
+    if (state.members[member].borrowed >= state.members[member].limit) {
+        return Result.err(model.Reason.loan_limit);
+    }
+    if (state.books[book].available == 0) {
+        return Result.err(model.Reason.unavailable);
+    }
+    let head: model.Slot = lookup.head(read state, book);
+    match (copy(head)) {
+        case model.Slot.at(let slot: usize) {
+            if (state.holds[slot].member != member) {
+                return Result.err(model.Reason.queue_priority);
+            }
+        }
+        case model.Slot.none {}
+    }
+    let slot: usize = try(lookup.free_loan(read state));
+    let due: usize = state.day + days;
+    state.loans[slot] = model.Loan(active = true, member = member, book = book, due = due, renewals = 0);
+    state.books[book].available -= 1;
+    state.members[member].borrowed += 1;
+    state.counters.borrowed += 1;
+    match (move(head)) {
+        case model.Slot.at(let held: usize) {
+            state.holds[held].active = false;
+            state.counters.fulfilled += 1;
+        }
+        case model.Slot.none {}
+    }
+    return Result.ok();
+}
+
+pub func checkin(state: edit model.State, member_id: usize, book_id: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    let slot: usize = try(lookup.loan(read state, member, book));
+    if (state.day > state.loans[slot].due) {
+        let amount: usize = (state.day - state.loans[slot].due) * 2;
+        charge(edit state, member, amount);
+    }
+    state.loans[slot].active = false;
+    state.books[book].available += 1;
+    state.members[member].borrowed -= 1;
+    state.counters.returned += 1;
+    return Result.ok();
+}
+
+pub func renew(state: edit model.State, member_id: usize, book_id: usize, days: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    let slot: usize = try(lookup.loan(read state, member, book));
+    if (days == 0 || days > 365 || days > 1000000 - state.loans[slot].due) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    if (state.members[member].blocked) {
+        return Result.err(model.Reason.blocked);
+    }
+    if (state.members[member].balance != 0) {
+        return Result.err(model.Reason.debt);
+    }
+    if (state.day > state.loans[slot].due) {
+        return Result.err(model.Reason.overdue);
+    }
+    if (state.loans[slot].renewals >= 2) {
+        return Result.err(model.Reason.renewal_limit);
+    }
+    match (lookup.head(read state, book)) {
+        case model.Slot.at(let held: usize) {
+            return Result.err(model.Reason.busy);
+        }
+        case model.Slot.none {}
+    }
+    state.loans[slot].due += days;
+    state.loans[slot].renewals += 1;
+    state.counters.renewed += 1;
+    return Result.ok();
+}
+
+pub func lose(state: edit model.State, member_id: usize, book_id: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    let slot: usize = try(lookup.loan(read state, member, book));
+    charge(edit state, member, 100);
+    state.loans[slot].active = false;
+    state.books[book].total -= 1;
+    state.books[book].lost += 1;
+    state.members[member].borrowed -= 1;
+    state.counters.lost += 1;
+    return Result.ok();
+}

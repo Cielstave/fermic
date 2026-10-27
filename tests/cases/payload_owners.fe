@@ -1,0 +1,95 @@
+use std.mem;
+use std.fs;
+
+enum Packet { bytes(Buffer<u8>), empty, file(fs.File), count(u8), }
+enum Envelope { packet(Packet), idle, }
+
+func filled(length: usize) -> Result<Packet, mem.Error> {
+    var bytes: Buffer<u8> = try(mem.bytes(length, 32));
+    if (length > 0) { bytes[0] = 73; }
+    return Result.ok(Packet.bytes(move(bytes)));
+}
+
+func check(accepted: bool) -> Result<void, mem.Error> {
+    if (!accepted) { return Result.err(mem.Error.limit); }
+    return Result.ok();
+}
+
+func inspect(packet: Packet, index: usize) -> u8 {
+    match (packet) {
+        case Packet.bytes(let bytes: Buffer<u8>) { return bytes[index]; }
+        case Packet.empty { return 0; }
+        case Packet.file(let file: fs.File) { return 7; }
+        case Packet.count(let count: u8) { return count; }
+    }
+}
+
+func discard(packet: Packet) -> void {}
+
+export func basic(accepted: bool) -> Result<u8, mem.Error> {
+    let packet: Packet = try(filled(4));
+    try(check(accepted));
+    return Result.ok(inspect(move(packet), 0));
+}
+
+export func ignored() -> Result<void, mem.Error> {
+    let packet: Packet = try(filled(4));
+    return Result.ok();
+}
+
+export func nested(index: usize) -> Result<u8, mem.Error> {
+    let envelope: Envelope = Envelope.packet(try(filled(4)));
+    match (envelope) {
+        case Envelope.packet(let packet: Packet) { return Result.ok(inspect(move(packet), index)); }
+        case Envelope.idle { return Result.ok(0); }
+    }
+}
+
+export func replaced(accepted: bool) -> Result<u8, mem.Error> {
+    var packet: Packet = try(filled(4));
+    if (accepted) { packet = try(filled(4)); }
+    else { packet = Packet.count(9); }
+    return Result.ok(inspect(move(packet), 0));
+}
+
+export func repeated(rounds: usize, stopping: bool) -> Result<usize, mem.Error> {
+    var count: usize = 0;
+    for (var index: usize = 0; index < rounds; index += 1) {
+        let packet: Packet = try(filled(4));
+        match (packet) {
+            case Packet.bytes(let bytes: Buffer<u8>) {
+                count += 1;
+                if (stopping) { break; }
+                continue;
+            }
+            case Packet.empty {}
+            case Packet.file(let file: fs.File) {}
+            case Packet.count(let value: u8) {}
+        }
+    }
+    return Result.ok(count);
+}
+
+export func file_owner(inspect_value: bool) -> Result<u8, fs.Error> {
+    let file: fs.File = try(fs.open_read("input"));
+    let packet: Packet = Packet.file(move(file));
+    if (inspect_value) { return Result.ok(inspect(move(packet), 0)); }
+    discard(move(packet));
+    return Result.ok(0);
+}
+
+export func empty() -> void {
+    var packet: Packet;
+    packet = Packet.empty;
+    packet = Packet.count(2);
+}
+
+func combine(packet: Packet, byte: u8) -> u8 {
+    return inspect(move(packet), 0) + byte;
+}
+
+export func pending(index: usize) -> Result<u8, mem.Error> {
+    let packet: Packet = try(filled(4));
+    let byte: u8[1] = [1];
+    return Result.ok(combine(move(packet), byte[index]));
+}

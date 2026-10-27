@@ -1,0 +1,74 @@
+use "model.fe";
+use "lookup.fe";
+
+pub func add(state: edit model.State, id: usize, limit: usize) -> Result<void, model.Reason> {
+    if (id == 0 || limit == 0 || limit > 8) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    match (lookup.member(read state, id)) {
+        case Result.ok(let index: usize) {
+            return Result.err(model.Reason.duplicate);
+        }
+        case Result.err(let error: model.Reason) {}
+    }
+    for (var index: usize = 0; index < state.members.len; index += 1) {
+        if (!state.members[index].active) {
+            state.members[index] = model.Member(active = true, id = id, limit = limit,
+                                               borrowed = 0, blocked = false, balance = 0);
+            return Result.ok();
+        }
+    }
+    return Result.err(model.Reason.full);
+}
+
+pub func block(state: edit model.State, id: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.member(read state, id));
+    if (state.members[index].blocked) {
+        return Result.err(model.Reason.duplicate);
+    }
+    state.members[index].blocked = true;
+    return Result.ok();
+}
+
+pub func unblock(state: edit model.State, id: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.member(read state, id));
+    if (!state.members[index].blocked) {
+        return Result.err(model.Reason.duplicate);
+    }
+    state.members[index].blocked = false;
+    return Result.ok();
+}
+
+pub func pay(state: edit model.State, id: usize, amount: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.member(read state, id));
+    if (amount == 0 || amount > state.members[index].balance) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    state.members[index].balance -= amount;
+    state.counters.paid += amount;
+    return Result.ok();
+}
+
+pub func set_limit(state: edit model.State, id: usize, limit: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.member(read state, id));
+    if (limit == 0 || limit > 8) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    if (limit < state.members[index].borrowed) {
+        return Result.err(model.Reason.busy);
+    }
+    state.members[index].limit = limit;
+    return Result.ok();
+}
+
+pub func close(state: edit model.State, id: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.member(read state, id));
+    if (state.members[index].borrowed != 0 || state.members[index].balance != 0) {
+        return Result.err(model.Reason.busy);
+    }
+    if (lookup.hold_count(read state, index) != 0) {
+        return Result.err(model.Reason.busy);
+    }
+    state.members[index].active = false;
+    return Result.ok();
+}

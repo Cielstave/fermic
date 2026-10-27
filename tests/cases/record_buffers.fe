@@ -1,0 +1,117 @@
+use std.buffer;
+use std.slice;
+
+struct Row { tag: u8; id: usize; name: str; }
+struct Owner { rows: Buffer<Row>; }
+struct Small { bytes: u8[3]; }
+enum Token { none, row(Row), code(u32), }
+
+func records() -> Result<bool, buffer.Error> {
+    var source: Row[2] = [Row(tag = 1, id = 7, name = "café"), Row(tag = 2, id = 9, name = "last")];
+    let width: usize = buffer.element_size<Row>();
+    var rows: Buffer<Row> = try(buffer.from_slice<Row>(read source, width * 8));
+    source[0].id = 99;
+    if (rows[0].id != 7) { return Result.ok(false); }
+    let length: usize = try(buffer.push<Row>(edit rows, Row(tag = 3, id = 11, name = "new")));
+    let seed: Row = Row(tag = 4, id = 42, name = "seed");
+    let grown: usize = try(buffer.resize_filled<Row>(edit rows, 6, copy(seed)));
+    if (length != 3 || grown != 6 || rows[3].id != 42 || rows[5].name[0] != 115) { return Result.ok(false); }
+    let reduced: usize = try(buffer.resize_filled<Row>(edit rows, 1, copy(seed)));
+    let restored: usize = try(buffer.resize_filled<Row>(edit rows, 3, copy(seed)));
+    if (rows[0].id != 7 || rows[1].id != 42 || rows[2].id != 42) { return Result.ok(false); }
+    let last: Row = try(buffer.pop<Row>(edit rows));
+    let owner: Owner = Owner(rows = move(rows));
+    return Result.ok(last.id == 42 && owner.rows.len == 2 && owner.rows[0].name[3] == 195);
+}
+
+func test_record_lifecycle() -> bool {
+    match (records()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+func variants() -> Result<bool, buffer.Error> {
+    var tokens: Buffer<Token> = try(buffer.empty<Token>(4096));
+    let first: usize = try(buffer.push<Token>(edit tokens, Token.row(Row(tag = 1, id = 17, name = "token"))));
+    let second: usize = try(buffer.push<Token>(edit tokens, Token.none));
+    let discarded: Token = try(buffer.pop<Token>(edit tokens));
+    match (move(discarded)) {
+        case Token.none {}
+        case Token.row(let row: Row) { return Result.ok(false); }
+        case Token.code(let code: u32) { return Result.ok(false); }
+    }
+    let item: Token = try(buffer.pop<Token>(edit tokens));
+    match (move(item)) {
+        case Token.none { return Result.ok(false); }
+        case Token.row(let row: Row) { return Result.ok(row.id == 17 && tokens.len == 0); }
+        case Token.code(let code: u32) { return Result.ok(false); }
+    }
+}
+
+func test_payload_storage() -> bool {
+    match (variants()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+func scalars() -> Result<bool, buffer.Error> {
+    var flags: Buffer<bool> = try(buffer.empty<bool>(4));
+    let size: usize = try(buffer.resize_filled<bool>(edit flags, 3, true));
+    let last: bool = try(buffer.pop<bool>(edit flags));
+    var names: Buffer<str> = try(buffer.empty<str>(128));
+    let appended: usize = try(buffer.push<str>(edit names, "café"));
+    let name: str = try(buffer.pop<str>(edit names));
+    var small: Buffer<Small> = try(buffer.empty<Small>(6));
+    let count: usize = try(buffer.push<Small>(edit small, Small(bytes = [7, 9, 11])));
+    return Result.ok(size == 3 && last && flags[0] && appended == 1 && name[3] == 195 &&
+                     buffer.element_size<Small>() == 3 && count == 1 && small[0].bytes[1] == 9);
+}
+
+func test_scalar_and_odd_width_storage() -> bool {
+    match (scalars()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+export func row_width() -> usize { return buffer.element_size<Row>(); }
+
+export func grow_records(limit: usize) -> Result<usize, buffer.Error> {
+    var rows: Buffer<Row> = try(buffer.empty<Row>(limit));
+    let initial: usize = try(buffer.push<Row>(edit rows, Row(tag = 1, id = 7, name = "café")));
+    let capacity: usize = rows.capacity;
+    let seed: Row = Row(tag = 2, id = 11, name = "later");
+    match (buffer.resize_filled<Row>(edit rows, 5, copy(seed))) {
+        case Result.ok(let count: usize) {
+            if (rows[0].id != 7 || rows[0].tag != 1 || rows[4].id != 11 || rows[4].tag != 2) {
+                return Result.err(buffer.Error.invalid_state);
+            }
+            return Result.ok(count);
+        }
+        case Result.err(let error: buffer.Error) {
+            if (rows.len != 1 || rows.capacity != capacity || rows[0].id != 7 ||
+                rows[0].tag != 1 || rows[0].name[3] != 195) { return Result.err(buffer.Error.invalid_state); }
+            return Result.err(error);
+        }
+    }
+}
+
+export func cleanup_fault(index: usize) -> usize {
+    match (buffer.empty<Row>(1024)) {
+        case Result.ok(let initial: Buffer<Row>) {
+            var rows: Buffer<Row> = move(initial);
+            match (buffer.push<Row>(edit rows, Row(tag = 1, id = 17, name = "value"))) {
+                case Result.ok(let length: usize) { return rows[index].id; }
+                case Result.err(let error: buffer.Error) { return 0; }
+            }
+        }
+        case Result.err(let error: buffer.Error) { return 0; }
+    }
+}
+
+export func oversized_records(length: usize) -> Result<usize, buffer.Error> {
+    var rows: Buffer<Row> = try(buffer.empty<Row>(18446744073709551615));
+    return buffer.resize_filled<Row>(edit rows, length, Row(tag = 1, id = 17, name = "seed"));
+}

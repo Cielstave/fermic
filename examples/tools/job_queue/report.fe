@@ -1,0 +1,21 @@
+use std.fmt;
+use std.io;
+
+pub func text(bytes: read u8[]) -> i32 {
+    match (io.write(read bytes)) {
+        case Result.ok(let written: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}
+
+pub func metric(label: read u8[], value: usize) -> i32 {
+    var output: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    if (text(read label) != 0) { return 74; }
+    match (fmt.usize_into(value, edit output)) {
+        case Result.ok(let length: usize) {
+            if (text(read output[0..length]) != 0) { return 74; }
+        }
+        case Result.err(let error: fmt.Error) { return 70; }
+    }
+    return text(read "\n");
+}

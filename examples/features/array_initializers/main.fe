@@ -1,0 +1,54 @@
+use std.fmt;
+use std.io;
+
+enum Error { input_too_long, }
+
+// Count distinct byte values without allocation or rescanning the prefix.
+@budget(work = 20000, heap = 0)
+func distinct_small(bytes: read u8[]) -> Result<usize, Error> {
+    if (bytes.len > 32) { return Result.err(Error.input_too_long); }
+    var seen: bool[256] = [false; 256];
+    var count: usize = 0;
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        let byte: usize = widen<usize>(bytes[index]);
+        if (!seen[byte]) {
+            seen[byte] = true;
+            count += 1;
+        }
+    }
+    return Result.ok(count);
+}
+
+func counted(bytes: read u8[], expected: usize) -> bool {
+    match (distinct_small(read bytes)) {
+        case Result.ok(let count: usize) { return count == expected; }
+        case Result.err(let error: Error) { return false; }
+    }
+}
+
+func test_distinct_bytes() -> bool {
+    return counted(read "", 0) && counted(read "banana", 3) &&
+           counted(read "fermi compiler", 10);
+}
+
+func test_mutable_storage() -> bool {
+    var values: i32[4] = [-7; 4];
+    values[1] = 5;
+    return values[0] == -7 && values[1] == 5 && values[3] == -7;
+}
+
+func main() -> i32 {
+    match (distinct_small(read "fermi compiler")) {
+        case Result.ok(let count: usize) {
+            var output: u8[20] = [0; 20];
+            match (fmt.usize_into(count, edit output)) {
+                case Result.ok(let length: usize) {
+                    io.println(read output[0..length]);
+                    return 0;
+                }
+                case Result.err(let error: fmt.Error) { return 70; }
+            }
+        }
+        case Result.err(let error: Error) { return 65; }
+    }
+}

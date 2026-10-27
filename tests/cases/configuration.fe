@@ -1,0 +1,21 @@
+use std.env;
+use std.num;
+use std.config;
+
+export func read_value(name: read u8[], output: edit u8[]) -> Result<usize, env.Error> {
+    return env.read_into(read name, edit output);
+}
+
+@budget(work = 2000, heap = 0)
+export func parse_value(bytes: read u8[]) -> Result<usize, num.Error> {
+    return num.parse_usize(read bytes);
+}
+
+@budget(work = 2500, heap = 0)
+export func parse_range(bytes: read u8[], minimum: usize, maximum: usize) -> Result<usize, num.Error> {
+    return num.usize_range(read bytes, minimum, maximum);
+}
+
+export func configured(name: read u8[], minimum: usize, maximum: usize) -> Result<usize, config.Error> {
+    return config.usize_env(read name, minimum, maximum);
+}

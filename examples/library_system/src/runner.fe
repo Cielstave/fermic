@@ -1,0 +1,131 @@
+use "model.fe";
+use "decoder.fe";
+use "engine.fe";
+use "invariants.fe";
+use "report.fe";
+use "diagnostics.fe";
+use std.fs;
+
+pub enum Error {
+    read_failed,
+    invalid_input,
+    truncated,
+    input_limit,
+    command_limit,
+    invariant,
+}
+
+pub struct Progress {
+    bytes: usize;
+    commands: usize;
+    line: usize;
+}
+
+func process(state: edit model.State, file: edit fs.File, progress: edit Progress) -> Result<void, Error> {
+    var parser: decoder.Decoder = decoder.initial();
+    var bytes: u8[32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    while (true) {
+        match (fs.read_into(edit file, edit bytes)) {
+            case Result.ok(let length: usize) {
+                if (length == 0) {
+                    break;
+                }
+                if (length > 1048576 - progress.bytes) {
+                    return Result.err(Error.input_limit);
+                }
+                progress.bytes += length;
+                for (var index: usize = 0; index < length; index += 1) {
+                    progress.line = parser.line;
+                    match (decoder.feed(edit parser, bytes[index])) {
+                        case Result.ok(let event: decoder.Event) {
+                            match (move(event)) {
+                                case decoder.Event.pending {}
+                                case decoder.Event.command(let command: model.Command) {
+                                    if (progress.commands == 16384) {
+                                        return Result.err(Error.command_limit);
+                                    }
+                                    progress.commands += 1;
+                                    engine.apply(edit state, read command);
+                                    if (!invariants.valid(read state)) {
+                                        return Result.err(Error.invariant);
+                                    }
+                                }
+                            }
+                        }
+                        case Result.err(let error: decoder.Error) {
+                            return Result.err(Error.invalid_input);
+                        }
+                    }
+                }
+            }
+            case Result.err(let error: fs.Error) {
+                return Result.err(Error.read_failed);
+            }
+        }
+    }
+    progress.line = parser.line;
+    if (!decoder.complete(read parser)) {
+        return Result.err(Error.truncated);
+    }
+    return Result.ok();
+}
+
+func failure(error: Error, line: usize) -> i32 {
+    match (error) {
+        case Error.read_failed {
+            return diagnostics.failure(read "library: journal read failed", line, 74);
+        }
+        case Error.invalid_input {
+            return diagnostics.failure(read "library: invalid journal syntax", line, 65);
+        }
+        case Error.truncated {
+            return diagnostics.failure(read "library: incomplete final command", line, 65);
+        }
+        case Error.input_limit {
+            return diagnostics.failure(read "library: journal exceeds 1048576 bytes", line, 65);
+        }
+        case Error.command_limit {
+            return diagnostics.failure(read "library: journal exceeds 16384 commands", line, 65);
+        }
+        case Error.invariant {
+            return diagnostics.failure(read "library: internal state invariant failed", line, 70);
+        }
+    }
+}
+
+pub func execute(source: read u8[], destination: read u8[]) -> i32 {
+    match (fs.open_read(read source)) {
+        case Result.ok(let opened: fs.File) {
+            var input: fs.File = move(opened);
+            var state: model.State = model.initial();
+            var progress: Progress = Progress(bytes = 0, commands = 0, line = 1);
+            match (process(edit state, edit input, edit progress)) {
+                case Result.ok() {}
+                case Result.err(let error: Error) {
+                    return failure(error, progress.line);
+                }
+            }
+            match (fs.close(move(input))) {
+                case Result.ok() {}
+                case Result.err(let error: fs.Error) {
+                    return diagnostics.failure(read "library: journal close failed", 0, 74);
+                }
+            }
+            if (!invariants.valid(read state)) {
+                return diagnostics.failure(read "library: final state invariant failed", 0, 70);
+            }
+            match (report.save(read state, read destination)) {
+                case Result.ok() {
+                    return 0;
+                }
+                case Result.err(let error: fs.Error) {
+                    return diagnostics.failure(read "library: report publication failed", 0, 74);
+                }
+            }
+        }
+        case Result.err(let error: fs.Error) {
+            return diagnostics.failure(read "library: journal open failed", 0, 74);
+        }
+    }
+}

@@ -1,0 +1,29 @@
+pub enum Error {
+    empty,
+    too_large,
+}
+
+pub struct Summary {
+    count: i64;
+    mean: i64;
+}
+
+func adjust(value: i32) -> i64 {
+    return widen<i64>(value);
+}
+
+pub func summarize(samples: read i32[]) -> Result<Summary, Error> {
+    if (samples.len == 0) {
+        return Result.err(Error.empty);
+    }
+    if (samples.len > 4096) {
+        return Result.err(Error.too_large);
+    }
+    var total: i64 = 0;
+    var count: i64 = 0;
+    for (var i: usize = 0; i < samples.len; i += 1) {
+        total += adjust(samples[i]);
+        count += 1;
+    }
+    return Result.ok(Summary(count = count, mean = total / count));
+}

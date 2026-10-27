@@ -1,0 +1,59 @@
+use std.io;
+
+enum Failure { rejected, }
+
+func payload(accept: bool, value: i32) -> Result<i32[2], Failure> {
+    if (accept) {
+        let pair: i32[2] = [value, value + 1];
+        return Result.ok(move(pair));
+    }
+    return Result.err(Failure.rejected);
+}
+
+export func select(accept: bool, value: i32, at: usize) -> i32 {
+    let result: Result<i32[2], Failure> = payload(accept, value);
+    match (result) {
+        case Result.ok(let pair: i32[2]) { return pair[at]; }
+        case Result.err(let reason: Failure) { return -1; }
+    }
+}
+
+export func find(data: read i32[], target: i32) -> usize {
+    for (var i: usize = 0; i < data.len; i += 1) {
+        if (data[i] == target) { return i; }
+    }
+    return data.len;
+}
+
+func write_value(data: edit i32[], early: bool) -> void {
+    if (early) { return; }
+    data[0] = 42;
+}
+
+export func update(data: edit i32[], early: bool) -> void {
+    write_value(edit data, early);
+}
+
+func mark(data: edit i32[], value: i32) -> i32 {
+    data[0] = value;
+    return value;
+}
+
+func combine(first: i32, second: i32, third: i32, entered: edit i32[]) -> i32 {
+    entered[0] = 1;
+    return first + second + third;
+}
+
+export func arguments(first: edit i32[], last: edit i32[], entered: edit i32[],
+                      divisor: i32) -> i32 {
+    return combine(mark(edit first, 10), 6 / divisor, mark(edit last, 30), edit entered);
+}
+
+export func send(empty: bool) -> Result<usize, io.Error> {
+    if (empty) { return io.write(read ""); }
+    return io.write(read "x");
+}
+
+export func receive(data: edit u8[]) -> Result<usize, io.Error> {
+    return io.read_into(edit data);
+}

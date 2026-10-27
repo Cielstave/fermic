@@ -1,0 +1,214 @@
+use "src/model.fe";
+use "src/engine.fe";
+use "src/invariants.fe";
+use "src/decoder.fe";
+
+func apply(state: edit model.State, operation: model.Operation, first: usize, second: usize, third: usize) -> void {
+    let command: model.Command = model.Command(operation = operation, first = first, second = second, third = third);
+    engine.apply(edit state, read command);
+}
+
+func latest(state: read model.State) -> model.Reason {
+    return state.audit[(state.sequence - 1) % state.audit.len].reason;
+}
+
+func replay(state: edit model.State, bytes: read u8[]) -> bool {
+    var parser: decoder.Decoder = decoder.initial();
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        match (decoder.feed(edit parser, bytes[index])) {
+            case Result.ok(let event: decoder.Event) {
+                match (move(event)) {
+                    case decoder.Event.pending {}
+                    case decoder.Event.command(let command: model.Command) {
+                        engine.apply(edit state, read command);
+                    }
+                }
+            }
+            case Result.err(let error: decoder.Error) {
+                return false;
+            }
+        }
+    }
+    return decoder.complete(read parser) && invariants.valid(read state);
+}
+
+func test_checkout_and_late_return() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 2, 0);
+    apply(edit state, model.Operation.add_member, 20, 2, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 2);
+    apply(edit state, model.Operation.advance, 5, 0, 0);
+    apply(edit state, model.Operation.return_book, 20, 10, 0);
+    return invariants.valid(read state) && state.books[0].available == 2 &&
+           state.members[0].balance == 6 && state.counters.fees == 6 && state.counters.returned == 1;
+}
+
+func test_reservation_priority() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 1, 0);
+    apply(edit state, model.Operation.add_member, 20, 2, 0);
+    apply(edit state, model.Operation.add_member, 21, 2, 0);
+    apply(edit state, model.Operation.reserve, 20, 10, 0);
+    apply(edit state, model.Operation.borrow_book, 21, 10, 3);
+    if (latest(read state) != model.Reason.queue_priority) {
+        return false;
+    }
+    apply(edit state, model.Operation.borrow_book, 20, 10, 3);
+    return invariants.valid(read state) && state.counters.fulfilled == 1 &&
+           !state.holds[0].active && state.members[0].borrowed == 1 && state.members[1].borrowed == 0;
+}
+
+func test_renewal_and_debt() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 1, 0);
+    apply(edit state, model.Operation.add_member, 20, 2, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 5);
+    apply(edit state, model.Operation.renew, 20, 10, 5);
+    apply(edit state, model.Operation.renew, 20, 10, 5);
+    apply(edit state, model.Operation.renew, 20, 10, 5);
+    if (latest(read state) != model.Reason.renewal_limit || state.loans[0].due != 15) {
+        return false;
+    }
+    apply(edit state, model.Operation.advance, 16, 0, 0);
+    apply(edit state, model.Operation.renew, 20, 10, 1);
+    if (latest(read state) != model.Reason.overdue) {
+        return false;
+    }
+    apply(edit state, model.Operation.return_book, 20, 10, 0);
+    apply(edit state, model.Operation.close_member, 20, 0, 0);
+    if (latest(read state) != model.Reason.busy) {
+        return false;
+    }
+    apply(edit state, model.Operation.pay, 20, 2, 0);
+    apply(edit state, model.Operation.close_member, 20, 0, 0);
+    return invariants.valid(read state) && !state.members[0].active && state.counters.paid == 2;
+}
+
+func test_limits_and_blocking() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 2, 0);
+    apply(edit state, model.Operation.add_book, 11, 2, 0);
+    apply(edit state, model.Operation.add_member, 20, 1, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 3);
+    apply(edit state, model.Operation.borrow_book, 20, 11, 3);
+    if (latest(read state) != model.Reason.loan_limit) {
+        return false;
+    }
+    apply(edit state, model.Operation.set_limit, 20, 2, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 11, 3);
+    apply(edit state, model.Operation.set_limit, 20, 1, 0);
+    if (latest(read state) != model.Reason.busy) {
+        return false;
+    }
+    apply(edit state, model.Operation.block, 20, 0, 0);
+    apply(edit state, model.Operation.renew, 20, 10, 1);
+    if (latest(read state) != model.Reason.blocked) {
+        return false;
+    }
+    apply(edit state, model.Operation.return_book, 20, 10, 0);
+    apply(edit state, model.Operation.unblock, 20, 0, 0);
+    return invariants.valid(read state) && state.members[0].borrowed == 1;
+}
+
+func test_loss_and_restock() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 1, 0);
+    apply(edit state, model.Operation.add_member, 20, 2, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 3);
+    apply(edit state, model.Operation.lose, 20, 10, 0);
+    apply(edit state, model.Operation.restock, 10, 2, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 3);
+    if (latest(read state) != model.Reason.debt) {
+        return false;
+    }
+    apply(edit state, model.Operation.pay, 20, 100, 0);
+    apply(edit state, model.Operation.borrow_book, 20, 10, 3);
+    return invariants.valid(read state) && state.books[0].total == 2 && state.books[0].lost == 1 &&
+           state.books[0].available == 1 && state.counters.fees == 100;
+}
+
+func test_catalog_and_member_capacity() -> bool {
+    var state: model.State = model.initial();
+    for (var id: usize = 1; id < 33; id += 1) {
+        apply(edit state, model.Operation.add_book, id, 1, 0);
+        apply(edit state, model.Operation.add_member, id + 100, 1, 0);
+    }
+    apply(edit state, model.Operation.add_book, 33, 1, 0);
+    if (latest(read state) != model.Reason.full) {
+        return false;
+    }
+    apply(edit state, model.Operation.add_member, 133, 1, 0);
+    if (latest(read state) != model.Reason.full) {
+        return false;
+    }
+    apply(edit state, model.Operation.retire, 1, 0, 0);
+    apply(edit state, model.Operation.close_member, 101, 0, 0);
+    apply(edit state, model.Operation.add_book, 33, 2, 0);
+    apply(edit state, model.Operation.add_member, 133, 2, 0);
+    return invariants.valid(read state) && state.books[0].id == 33 && state.members[0].id == 133;
+}
+
+func test_loan_capacity() -> bool {
+    var state: model.State = model.initial();
+    for (var id: usize = 1; id < 10; id += 1) {
+        apply(edit state, model.Operation.add_book, id, 8, 0);
+        apply(edit state, model.Operation.add_member, id + 100, 8, 0);
+    }
+    for (var member: usize = 101; member < 109; member += 1) {
+        for (var book: usize = 1; book < 9; book += 1) {
+            apply(edit state, model.Operation.borrow_book, member, book, 7);
+        }
+    }
+    apply(edit state, model.Operation.borrow_book, 109, 9, 7);
+    return latest(read state) == model.Reason.full && invariants.valid(read state) && state.counters.borrowed == 64;
+}
+
+func test_hold_capacity_and_reuse() -> bool {
+    var state: model.State = model.initial();
+    for (var book: usize = 1; book < 5; book += 1) {
+        apply(edit state, model.Operation.add_book, book, 1, 0);
+    }
+    for (var member: usize = 101; member < 118; member += 1) {
+        apply(edit state, model.Operation.add_member, member, 1, 0);
+        if (member < 117) {
+            for (var book: usize = 1; book < 5; book += 1) {
+                apply(edit state, model.Operation.reserve, member, book, 0);
+            }
+        }
+    }
+    apply(edit state, model.Operation.reserve, 117, 1, 0);
+    if (latest(read state) != model.Reason.full) {
+        return false;
+    }
+    apply(edit state, model.Operation.cancel, 101, 1, 0);
+    apply(edit state, model.Operation.reserve, 117, 1, 0);
+    return invariants.valid(read state) && state.ticket == 65 && state.holds[0].ticket == 65;
+}
+
+func test_invariant_detection() -> bool {
+    var state: model.State = model.initial();
+    apply(edit state, model.Operation.add_book, 10, 1, 0);
+    state.books[0].available += 1;
+    if (invariants.valid(read state)) {
+        return false;
+    }
+    state.books[0].available -= 1;
+    return invariants.valid(read state);
+}
+
+func test_stream_decoder() -> bool {
+    var state: model.State = model.initial();
+    return replay(edit state, read "\nBOOK 00010 2\nMEMBER 20 2\nBORROW 20 10 7\n") &&
+           state.counters.accepted == 3 && state.members[0].borrowed == 1;
+}
+
+func test_invalid_journals() -> bool {
+    var state: model.State = model.initial();
+    if (replay(edit state, read "BOOK 1 2")) { return false; }
+    if (replay(edit state, read "UNKNOWN 1\n")) { return false; }
+    if (replay(edit state, read "BOOK 1 2 3\n")) { return false; }
+    if (replay(edit state, read "BOOK 1000001 2\n")) { return false; }
+    if (replay(edit state, read "BOOK 1 2\r\n")) { return false; }
+    if (replay(edit state, read " BOOK 1 2\n")) { return false; }
+    return invariants.valid(read state);
+}

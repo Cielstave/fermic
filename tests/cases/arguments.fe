@@ -1,0 +1,13 @@
+use std.args;
+use std.fmt;
+
+export func count_arguments() -> Result<usize, args.Error> {
+    return args.count();
+}
+export func read_argument(index: usize, output: edit u8[]) -> Result<usize, args.Error> {
+    return args.read_into(index, edit output);
+}
+@budget(work = 2000, heap = 0)
+export func format_value(value: usize, output: edit u8[]) -> Result<usize, fmt.Error> {
+    return fmt.usize_into(value, edit output);
+}

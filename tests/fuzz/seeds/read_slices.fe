@@ -1,0 +1,10 @@
+struct Record { bytes: u8[3]; }
+struct Group { records: Record[2]; }
+func first(bytes: read u8[]) -> u8 { return bytes[0]; }
+func inspect(value: read Group, start: usize, end: usize) -> u8 {
+    return first(read value.records[1].bytes[start..end]);
+}
+func f() -> u8 {
+    let value: Group = Group(records = [Record(bytes = [7, 9, 11]); 2]);
+    return inspect(read value, 1, 3);
+}

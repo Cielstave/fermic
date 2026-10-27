@@ -1,0 +1,22 @@
+use math.statistics;
+use math.calibration;
+
+func main() -> i32 {
+    let samples: i32[4] = [10, 20, 30, 40];
+    let result: Result<statistics.Summary, statistics.Error> = statistics.summarize(read samples);
+    match (result) {
+        case Result.ok(let summary: statistics.Summary) {
+            let adjusted: i64 = calibration.apply(summary.mean, 2, -5);
+            if (adjusted == 45 && summary.count == 4) {
+                return 0;
+            }
+            return 1;
+        }
+        case Result.err(let reason: statistics.Error) {
+            if (reason == statistics.Error.empty) {
+                return 2;
+            }
+            return 3;
+        }
+    }
+}

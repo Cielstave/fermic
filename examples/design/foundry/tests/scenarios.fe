@@ -1,0 +1,69 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+// Proposed integration harness; these scenarios do not execute today.
+use backend;
+use backend.testing;
+
+func replay_does_not_reserve_another_slot() -> Result<void, backend.Failure> {
+    var system: testing.System = try testing.isolated_foundry();
+    let tenant: backend.Id = try testing.tenant(edit system);
+    let first: backend.Id = try testing.submit(edit system, tenant, "key-1", [1, 2, 2]);
+    let replay: backend.Id = try testing.submit(edit system, tenant, "key-1", [1, 2, 2]);
+    try testing.equal_id(first, replay);
+    try testing.pending_count(read system, tenant, 1);
+    try testing.submit_conflict(edit system, tenant, "key-1", [9]);
+    return Result.ok();
+}
+
+func another_tenant_cannot_read_or_cancel() -> Result<void, backend.Failure> {
+    var system: testing.System = try testing.isolated_foundry();
+    let owner: backend.Id = try testing.tenant(edit system);
+    let outsider: backend.Id = try testing.tenant(edit system);
+    let job: backend.Id = try testing.submit(edit system, owner, "key-2", [7]);
+    try testing.denied_read_and_cancel(edit system, outsider, owner, job);
+    try testing.missing_job_in_tenant(edit system, outsider, job);
+    return Result.ok();
+}
+
+func stale_worker_cannot_overwrite_result() -> Result<void, backend.Failure> {
+    var system: testing.System = try testing.isolated_foundry();
+    let tenant: backend.Id = try testing.tenant(edit system);
+    let job: backend.Id = try testing.submit(edit system, tenant, "key-3", [3, 3]);
+    let old_token: backend.Id = try testing.claim(edit system, job);
+    try testing.advance_database_clock(edit system, 31_000);
+    let new_token: backend.Id = try testing.claim(edit system, job);
+    try testing.complete(edit system, job, new_token);
+    try testing.reject_completion(edit system, job, old_token);
+    try testing.pending_count(read system, tenant, 0);
+    return Result.ok();
+}
+
+func insertion_failure_rolls_back_quota() -> Result<void, backend.Failure> {
+    var system: testing.System = try testing.isolated_foundry();
+    let tenant: backend.Id = try testing.tenant(edit system);
+    try testing.fail_next_insert(edit system);
+    try testing.submission_fails(edit system, tenant, "key-4", [8]);
+    try testing.pending_count(read system, tenant, 0);
+    try testing.no_idempotency_record(read system, tenant, "key-4");
+    return Result.ok();
+}
+
+func cancellation_wins_against_completion() -> Result<void, backend.Failure> {
+    var system: testing.System = try testing.isolated_foundry();
+    let tenant: backend.Id = try testing.tenant(edit system);
+    let job: backend.Id = try testing.submit(edit system, tenant, "key-5", [4]);
+    let token: backend.Id = try testing.claim(edit system, job);
+    try testing.cancel(edit system, tenant, job);
+    try testing.reject_completion(edit system, job, token);
+    try testing.cancel(edit system, tenant, job);
+    try testing.pending_count(read system, tenant, 0);
+    return Result.ok();
+}
+
+func run_all() -> Result<void, backend.Failure> {
+    try replay_does_not_reserve_another_slot();
+    try another_tenant_cannot_read_or_cancel();
+    try stale_worker_cannot_overwrite_result();
+    try insertion_failure_rolls_back_quota();
+    try cancellation_wins_against_completion();
+    return Result.ok();
+}

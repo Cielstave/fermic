@@ -1,0 +1,15 @@
+enum Failure { rejected, }
+func identity(bytes: Buffer<u8>) -> Buffer<u8> { return move(bytes); }
+func wrap(bytes: Buffer<u8>) -> Result<Buffer<u8>, Failure> {
+    return Result.ok(identity(move(bytes)));
+}
+func inspect(result: Result<Buffer<u8>, Failure>, index: usize) -> usize {
+    match (result) {
+        case Result.ok(let owner: Buffer<u8>) {
+            var bytes: Buffer<u8> = move(owner);
+            bytes[index] = 65;
+            return bytes.len;
+        }
+        case Result.err(let error: Failure) { return 0; }
+    }
+}

@@ -1,0 +1,59 @@
+use "model.fe";
+use "lookup.fe";
+
+pub func add(state: edit model.State, id: usize, copies: usize) -> Result<void, model.Reason> {
+    if (id == 0 || copies == 0 || copies > 1000) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    match (lookup.book(read state, id)) {
+        case Result.ok(let index: usize) {
+            return Result.err(model.Reason.duplicate);
+        }
+        case Result.err(let error: model.Reason) {}
+    }
+    for (var index: usize = 0; index < state.books.len; index += 1) {
+        if (!state.books[index].active) {
+            state.books[index] = model.Book(active = true, id = id, total = copies, available = copies, lost = 0);
+            return Result.ok();
+        }
+    }
+    return Result.err(model.Reason.full);
+}
+
+pub func restock(state: edit model.State, id: usize, copies: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.book(read state, id));
+    if (copies == 0 || copies > 1000 - state.books[index].total) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    state.books[index].total += copies;
+    state.books[index].available += copies;
+    return Result.ok();
+}
+
+pub func remove(state: edit model.State, id: usize, copies: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.book(read state, id));
+    if (copies == 0) {
+        return Result.err(model.Reason.invalid_argument);
+    }
+    if (copies > state.books[index].available) {
+        return Result.err(model.Reason.busy);
+    }
+    state.books[index].total -= copies;
+    state.books[index].available -= copies;
+    return Result.ok();
+}
+
+pub func retire(state: edit model.State, id: usize) -> Result<void, model.Reason> {
+    let index: usize = try(lookup.book(read state, id));
+    if (state.books[index].available != state.books[index].total) {
+        return Result.err(model.Reason.busy);
+    }
+    match (lookup.head(read state, index)) {
+        case model.Slot.at(let slot: usize) {
+            return Result.err(model.Reason.busy);
+        }
+        case model.Slot.none {}
+    }
+    state.books[index].active = false;
+    return Result.ok();
+}

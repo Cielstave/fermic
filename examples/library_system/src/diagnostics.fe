@@ -1,0 +1,46 @@
+use std.io;
+use std.fmt;
+
+func write(bytes: read u8[]) -> bool {
+    var offset: usize = 0;
+    while (offset < bytes.len) {
+        match (io.write_stderr(read bytes[offset..bytes.len])) {
+            case Result.ok(let count: usize) {
+                if (count == 0) {
+                    return false;
+                }
+                offset += count;
+            }
+            case Result.err(let error: io.Error) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+pub func failure(message: read u8[], line: usize, status: i32) -> i32 {
+    if (!write(read message)) {
+        return 74;
+    }
+    if (line != 0) {
+        if (!write(read ": line ")) {
+            return 74;
+        }
+        var bytes: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        match (fmt.usize_into(line, edit bytes)) {
+            case Result.ok(let length: usize) {
+                if (!write(read bytes[0..length])) {
+                    return 74;
+                }
+            }
+            case Result.err(let error: fmt.Error) {
+                return 74;
+            }
+        }
+    }
+    if (!write(read "\n")) {
+        return 74;
+    }
+    return status;
+}

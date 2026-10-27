@@ -1,0 +1,82 @@
+use "model.fe";
+
+pub func book(state: read model.State, id: usize) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.books.len; index += 1) {
+        if (state.books[index].active && state.books[index].id == id) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.missing_book);
+}
+
+pub func member(state: read model.State, id: usize) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.members.len; index += 1) {
+        if (state.members[index].active && state.members[index].id == id) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.missing_member);
+}
+
+pub func loan(state: read model.State, member: usize, book: usize) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.loans.len; index += 1) {
+        if (state.loans[index].active && state.loans[index].member == member && state.loans[index].book == book) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.missing_loan);
+}
+
+pub func hold(state: read model.State, member: usize, book: usize) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (state.holds[index].active && state.holds[index].member == member && state.holds[index].book == book) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.missing_hold);
+}
+
+pub func free_loan(state: read model.State) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.loans.len; index += 1) {
+        if (!state.loans[index].active) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.full);
+}
+
+pub func free_hold(state: read model.State) -> Result<usize, model.Reason> {
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (!state.holds[index].active) {
+            return Result.ok(index);
+        }
+    }
+    return Result.err(model.Reason.full);
+}
+
+pub func head(state: read model.State, book: usize) -> model.Slot {
+    var found: bool = false;
+    var selected: usize = 0;
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (state.holds[index].active && state.holds[index].book == book) {
+            if (!found || state.holds[index].ticket < state.holds[selected].ticket) {
+                selected = index;
+                found = true;
+            }
+        }
+    }
+    if (found) {
+        return model.Slot.at(selected);
+    }
+    return model.Slot.none;
+}
+
+pub func hold_count(state: read model.State, member: usize) -> usize {
+    var count: usize = 0;
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (state.holds[index].active && state.holds[index].member == member) {
+            count += 1;
+        }
+    }
+    return count;
+}

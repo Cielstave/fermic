@@ -1,0 +1,13 @@
+use std.mem;
+func consume(buffer: Buffer<u8>) -> usize { return 0; }
+func first(left: read u8[], right: read u8[]) -> u8 { return left[0]; }
+func main() -> i32 {
+    match (mem.bytes(4, 4)) {
+        case Result.ok(let left: Buffer<u8>) {
+            let right: u8[1] = [1];
+            let value: u8 = first(read left, read right[consume(move(left))..1]);
+            return widen<i32>(value);
+        }
+        case Result.err(let error: mem.Error) { return 1; }
+    }
+}

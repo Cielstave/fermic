@@ -1,0 +1,12 @@
+@effects()
+@budget(work = 100, heap = 0)
+func checked(value: u8) -> u16 { return widen<u16>(value) + 1; }
+
+@effects(memory)
+func release(buffer: Buffer<u8>) -> void {}
+
+@effects()
+func recursive(value: u8) -> bool {
+    if (value == 0) { return true; }
+    return recursive(value - 1);
+}

@@ -1,0 +1,117 @@
+use "errors.fe";
+use std.text;
+
+pub enum Kind { item, receive, issue, price, remove, }
+
+pub struct Command {
+    kind: Kind;
+    id: usize;
+    amount: usize;
+    price: usize;
+    name: u8[48];
+    name_length: usize;
+}
+
+pub struct Item {
+    active: bool;
+    id: usize;
+    quantity: usize;
+    price: usize;
+    name: u8[48];
+    name_length: usize;
+}
+
+pub struct State { items: Item[64]; }
+
+func empty_item() -> Item {
+    return Item(active = false, id = 0, quantity = 0, price = 0,
+                name = [0; 48], name_length = 0);
+}
+
+pub func initial() -> State { return State(items = [empty_item(); 64]); }
+
+pub func command(kind: Kind) -> Command {
+    return Command(kind = kind, id = 0, amount = 0, price = 0,
+                   name = [0; 48], name_length = 0);
+}
+
+pub func valid_name(bytes: read u8[]) -> bool {
+    if (bytes.len == 0 || bytes.len > 48) { return false; }
+    if (bytes[0] == 32 || bytes[bytes.len - 1] == 32) { return false; }
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        if (bytes[index] < 32 || bytes[index] == 127) { return false; }
+    }
+    return text.valid_utf8(read bytes);
+}
+
+pub func locate(state: read State, id: usize) -> usize {
+    for (var index: usize = 0; index < state.items.len; index += 1) {
+        if (state.items[index].active && state.items[index].id == id) { return index; }
+    }
+    return 64;
+}
+
+pub func apply(state: edit State, operation: read Command) -> Result<void, errors.Error> {
+    if (operation.id == 0 || operation.id > 1000000 ||
+        operation.amount > 1000000 || operation.price > 1000000) {
+        return Result.err(errors.Error.number);
+    }
+    var index: usize = locate(read state, operation.id);
+    if (operation.kind == Kind.item) {
+        if (operation.name_length > 48) { return Result.err(errors.Error.name); }
+        let length: usize = operation.name_length;
+        if (!valid_name(read operation.name[0..length])) { return Result.err(errors.Error.name); }
+        if (index != 64) { return Result.err(errors.Error.duplicate); }
+        for (var slot: usize = 0; slot < state.items.len; slot += 1) {
+            if (!state.items[slot].active) { index = slot; break; }
+        }
+        if (index == 64) { return Result.err(errors.Error.capacity); }
+        state.items[index].id = operation.id;
+        state.items[index].quantity = operation.amount;
+        state.items[index].price = operation.price;
+        state.items[index].name_length = length;
+        for (var byte: usize = 0; byte < length; byte += 1) {
+            state.items[index].name[byte] = operation.name[byte];
+        }
+        state.items[index].active = true;
+        return Result.ok();
+    }
+    if (index == 64) { return Result.err(errors.Error.missing); }
+    match (operation.kind) {
+        case Kind.item { return Result.err(errors.Error.invariant); }
+        case Kind.receive {
+            if (operation.amount > 1000000 - state.items[index].quantity) {
+                return Result.err(errors.Error.quantity);
+            }
+            state.items[index].quantity += operation.amount;
+        }
+        case Kind.issue {
+            if (operation.amount > state.items[index].quantity) { return Result.err(errors.Error.quantity); }
+            state.items[index].quantity -= operation.amount;
+        }
+        case Kind.price { state.items[index].price = operation.amount; }
+        case Kind.remove {
+            if (state.items[index].quantity != 0) { return Result.err(errors.Error.not_empty); }
+            state.items[index] = empty_item();
+        }
+    }
+    return Result.ok();
+}
+
+pub func valid(state: read State) -> bool {
+    for (var index: usize = 0; index < state.items.len; index += 1) {
+        if (state.items[index].active) {
+            if (state.items[index].id == 0 || state.items[index].id > 1000000 ||
+                state.items[index].quantity > 1000000 || state.items[index].price > 1000000 ||
+                state.items[index].name_length > 48) { return false; }
+            let length: usize = state.items[index].name_length;
+            if (!valid_name(read state.items[index].name[0..length])) { return false; }
+            for (var other: usize = index + 1; other < state.items.len; other += 1) {
+                if (state.items[other].active && state.items[index].id == state.items[other].id) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}

@@ -1,0 +1,22 @@
+use "statistics.fe";
+use std.io;
+
+func test_grouped_records() -> bool {
+    var groups: statistics.Summary[2] = [
+        statistics.Summary(count = 0, total = 0, peak = 0),
+        statistics.Summary(count = 0, total = 0, peak = 0)
+    ];
+    let values: u32[4] = [10, 20, 30, 40];
+    for (var index: usize = 0; index < values.len; index += 1) {
+        statistics.record(edit groups[index % 2], values[index]);
+    }
+    return groups[0].count == 2 && groups[1].count == 2 &&
+           statistics.total(read groups[0]) == 40 &&
+           statistics.total(read groups[1]) == 60 && groups[1].peak == 40;
+}
+
+func main() -> i32 {
+    if (!test_grouped_records()) { return 1; }
+    io.println("struct-borrows: records processed");
+    return 0;
+}

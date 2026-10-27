@@ -1,0 +1,80 @@
+pub enum Error {
+    empty,
+    too_long,
+    invalid_digit,
+    overflow,
+    invalid_range,
+    out_of_range,
+}
+
+// Decimal ASCII only. No signs, whitespace, prefixes, separators or truncation.
+@budget(work = 1500, heap = 0)
+pub func parse_usize(bytes: read u8[]) -> Result<usize, Error> {
+    if (bytes.len == 0) {
+        return Result.err(Error.empty);
+    }
+    if (bytes.len > 20) {
+        return Result.err(Error.too_long);
+    }
+    var value: usize = 0;
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        if (bytes[index] < 48 || bytes[index] > 57) {
+            return Result.err(Error.invalid_digit);
+        }
+        let digit: usize = widen<usize>(bytes[index] - 48);
+        if (value > (18_446_744_073_709_551_615 - digit) / 10) {
+            return Result.err(Error.overflow);
+        }
+        value = value * 10 + digit;
+    }
+    return Result.ok(value);
+}
+
+@budget(work = 2000, heap = 0)
+pub func usize_range(bytes: read u8[], minimum: usize, maximum: usize) -> Result<usize, Error> {
+    if (minimum > maximum) {
+        return Result.err(Error.invalid_range);
+    }
+    let value: usize = try(parse_usize(read bytes));
+    if (value < minimum || value > maximum) {
+        return Result.err(Error.out_of_range);
+    }
+    return Result.ok(value);
+}
+
+// Accumulate negatively so the minimum signed value never needs negation.
+@budget(work = 3000, heap = 0)
+pub func parse_i64(bytes: read u8[]) -> Result<i64, Error> {
+    if (bytes.len == 0) { return Result.err(Error.empty); }
+    let negative: bool = bytes[0] == 45;
+    var first: usize = 0;
+    if (negative) { first = 1; }
+    if (bytes.len == first) { return Result.err(Error.empty); }
+    if (bytes.len - first > 20) { return Result.err(Error.too_long); }
+    var limit: i64 = -9_223_372_036_854_775_807;
+    if (negative) { limit = -9_223_372_036_854_775_808; }
+    var value: i64 = 0;
+    for (var index: usize = 0; index < 21; index += 1) {
+        if (index >= first && index < bytes.len) {
+            if (bytes[index] < 48 || bytes[index] > 57) {
+                return Result.err(Error.invalid_digit);
+            }
+            let digit: i64 = widen<i64>(bytes[index] - 48);
+            if (value < (limit + digit) / 10) {
+                return Result.err(Error.overflow);
+            }
+            value = value * 10 - digit;
+        }
+    }
+    if (negative) { return Result.ok(value); }
+    return Result.ok(-value);
+}
+
+@budget(work = 4000, heap = 0)
+pub func parse_i32(bytes: read u8[]) -> Result<i32, Error> {
+    let value: i64 = try(parse_i64(read bytes));
+    match (narrow<i32>(value)) {
+        case Result.ok(let result: i32) { return Result.ok(result); }
+        case Result.err(let error: CastError) { return Result.err(Error.overflow); }
+    }
+}

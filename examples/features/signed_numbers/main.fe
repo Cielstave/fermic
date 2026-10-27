@@ -1,0 +1,52 @@
+use std.num;
+use std.fmt;
+use std.io;
+
+// Decimal amounts are integral minor units; floating-point rounding is avoided.
+func adjustment(before: read u8[], after: read u8[]) -> Result<i64, num.Error> {
+    let previous: i64 = try(num.parse_i64(read before));
+    let current: i64 = try(num.parse_i64(read after));
+    return Result.ok(current - previous);
+}
+
+func test_negative_adjustment() -> bool {
+    match (adjustment(read "5000", read "3750")) {
+        case Result.ok(let value: i64) { return value == -1250; }
+        case Result.err(let error: num.Error) { return false; }
+    }
+}
+
+func test_minimum_round_trip() -> bool {
+    var output: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (fmt.i64_into(-9_223_372_036_854_775_808, edit output)) {
+        case Result.ok(let length: usize) {
+            match (num.parse_i64(read output[0..length])) {
+                case Result.ok(let value: i64) { return value == -9_223_372_036_854_775_808; }
+                case Result.err(let error: num.Error) { return false; }
+            }
+        }
+        case Result.err(let error: fmt.Error) { return false; }
+    }
+}
+
+func main() -> i32 {
+    var output: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (adjustment(read "5000", read "3750")) {
+        case Result.ok(let value: i64) {
+            match (fmt.i64_into(value, edit output)) {
+                case Result.ok(let length: usize) {
+                    io.println(read output[0..length]);
+                    return 0;
+                }
+                case Result.err(let error: fmt.Error) {
+                    io.println(read "adjustment: output buffer too small");
+                    return 70;
+                }
+            }
+        }
+        case Result.err(let error: num.Error) {
+            io.println(read "adjustment: invalid decimal amount");
+            return 65;
+        }
+    }
+}

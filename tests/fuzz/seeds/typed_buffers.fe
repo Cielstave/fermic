@@ -1,0 +1,11 @@
+struct Samples { values: Buffer<i64>; }
+func first(samples: Samples) -> i64 {
+    if (samples.values.len == 0) { return 0; }
+    return samples.values[0];
+}
+func size<T: integer>(values: Buffer<T>) -> usize { return values.len; }
+func view(values: read u32[]) -> u32 {
+    if (values.len == 0) { return 0; }
+    return values[0];
+}
+func inspect(values: Buffer<u32>) -> u32 { return view(read values); }

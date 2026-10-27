@@ -1,0 +1,12 @@
+struct Item { count: u32; bytes: u8[2]; }
+struct State { item: Item; }
+func read_count(item: read Item) -> u32 { return item.count; }
+func increment(item: edit Item) -> void { item.count += 1; item.bytes[0] += 1; }
+func update(state: edit State) -> u32 {
+    increment(edit state.item);
+    return read_count(read state.item);
+}
+func exercise() -> u32 {
+    var state: State = State(item = Item(count = 1, bytes = [0, 0]));
+    return update(edit state);
+}

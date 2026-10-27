@@ -1,0 +1,32 @@
+use "decoder.fe";
+
+pub struct Item { quantity: u32; }
+pub struct Book { items: Item[8]; accepted: usize; rejected: usize; }
+
+func empty_item() -> Item { return Item(quantity = 0); }
+
+pub func empty() -> Book {
+    return Book(items = [empty_item(), empty_item(), empty_item(), empty_item(),
+                         empty_item(), empty_item(), empty_item(), empty_item()], accepted = 0, rejected = 0);
+}
+
+func update(item: edit Item, operation: decoder.Operation, amount: u32) -> bool {
+    match (operation) {
+        case decoder.Operation.add {
+            if (amount > 1000000 - item.quantity) { return false; }
+            item.quantity += amount;
+        }
+        case decoder.Operation.take {
+            if (amount > item.quantity) { return false; }
+            item.quantity -= amount;
+        }
+    }
+    return true;
+}
+
+pub func apply(book: edit Book, command: read decoder.Command) -> void {
+    if (command.item >= book.items.len) { book.rejected += 1; return; }
+    if (update(edit book.items[command.item], command.operation, command.amount)) {
+        book.accepted += 1;
+    } else { book.rejected += 1; }
+}

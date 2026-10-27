@@ -1,0 +1,77 @@
+// Lengths count initialized data elements; payload limits count allocated bytes.
+pub enum Error {
+    no_memory,
+    size_overflow,
+    limit,
+    invalid_argument,
+    invalid_state,
+}
+
+pub native func allocate<T: integer>(length: usize, limit: usize) -> Result<Buffer<T>, Error>;
+@effects()
+pub native func element_size<T: data>() -> usize;
+pub native func empty<T: data>(limit: usize) -> Result<Buffer<T>, Error>;
+pub native func resize_filled<T: data>(value: edit Buffer<T>, length: usize, seed: T) -> Result<usize, Error>;
+@effects()
+pub native func truncate<T: data>(value: edit Buffer<T>, length: usize) -> Result<usize, Error>;
+pub native func reserve<T: data>(value: edit Buffer<T>, capacity: usize) -> Result<usize, Error>;
+pub native func resize<T: integer>(value: edit Buffer<T>, length: usize) -> Result<usize, Error>;
+
+// Growth policy belongs to the library; the runtime primitives remain exact.
+pub func push<T: data>(value: edit Buffer<T>, item: T) -> Result<usize, Error> {
+    let previous: usize = value.len;
+    if (previous == 18_446_744_073_709_551_615) { return Result.err(Error.size_overflow); }
+    let length: usize = previous + 1;
+    if (previous == value.capacity) {
+        var capacity: usize = length;
+        if (previous <= 9_223_372_036_854_775_807) { capacity = previous * 2; }
+        if (capacity < 4) { capacity = 4; }
+        match (reserve<T>(edit value, capacity)) {
+            case Result.ok(let reserved: usize) {}
+            case Result.err(let error: Error) {
+                if (error == Error.limit || error == Error.size_overflow) {
+                    let reserved: usize = try(reserve<T>(edit value, length));
+                } else { return Result.err(error); }
+            }
+        }
+    }
+    let resized: usize = try(resize_filled<T>(edit value, length, copy(item)));
+    return Result.ok(resized);
+}
+
+// Shrink only after reading the last scalar; empty input is a domain error.
+pub func pop<T: data>(value: edit Buffer<T>) -> Result<T, Error> {
+    let length: usize = value.len;
+    if (length == 0) { return Result.err(Error.invalid_argument); }
+    let last: usize = length - 1;
+    let item: T = copy(value[last]);
+    let resized: usize = try(truncate<T>(edit value, last));
+    return Result.ok(copy(item));
+}
+
+// Resize once before copying, so a failed growth preserves the entire owner.
+pub func extend<T: data>(value: edit Buffer<T>, items: read T[]) -> Result<usize, Error> {
+    let previous: usize = value.len;
+    if (items.len == 0) { return Result.ok(previous); }
+    if (items.len > 18_446_744_073_709_551_615 - previous) {
+        return Result.err(Error.size_overflow);
+    }
+    let length: usize = previous + items.len;
+    let resized: usize = try(resize_filled<T>(edit value, length, copy(items[0])));
+    for (var index: usize = 0; index < items.len; index += 1) {
+        value[previous + index] = copy(items[index]);
+    }
+    return Result.ok(resized);
+}
+
+// Copy into independent storage; the input borrow ends when this call returns.
+pub func from_slice<T: data>(items: read T[], limit: usize) -> Result<Buffer<T>, Error> {
+    var value: Buffer<T> = try(empty<T>(limit));
+    let length: usize = try(extend<T>(edit value, read items));
+    return Result.ok(move(value));
+}
+
+// Keep capacity available for the next batch. This does not erase stored bytes.
+pub func clear<T: data>(value: edit Buffer<T>) -> Result<usize, Error> {
+    return truncate<T>(edit value, 0);
+}

@@ -1,0 +1,65 @@
+use "errors.fe";
+use "model.fe";
+use std.num;
+
+struct Cursor { offset: usize; }
+
+func equal(left: read u8[], right: read u8[]) -> bool {
+    if (left.len != right.len) { return false; }
+    for (var index: usize = 0; index < left.len; index += 1) {
+        if (left[index] != right[index]) { return false; }
+    }
+    return true;
+}
+
+func kind(bytes: read u8[]) -> Result<model.Kind, errors.Error> {
+    if (equal(read bytes, read "ITEM")) { return Result.ok(model.Kind.item); }
+    if (equal(read bytes, read "IN")) { return Result.ok(model.Kind.receive); }
+    if (equal(read bytes, read "OUT")) { return Result.ok(model.Kind.issue); }
+    if (equal(read bytes, read "PRICE")) { return Result.ok(model.Kind.price); }
+    if (equal(read bytes, read "DROP")) { return Result.ok(model.Kind.remove); }
+    return Result.err(errors.Error.syntax);
+}
+
+func number(bytes: read u8[], cursor: edit Cursor, more: bool) -> Result<usize, errors.Error> {
+    let start: usize = cursor.offset;
+    var end: usize = start;
+    while (end < bytes.len && bytes[end] != 32) { end += 1; }
+    if (start == end || end - start > 7) { return Result.err(errors.Error.number); }
+    if (more) {
+        if (end == bytes.len || end + 1 == bytes.len) { return Result.err(errors.Error.syntax); }
+        cursor.offset = end + 1;
+    } else {
+        if (end != bytes.len) { return Result.err(errors.Error.syntax); }
+        cursor.offset = end;
+    }
+    match (num.parse_usize(read bytes[start..end])) {
+        case Result.ok(let value: usize) {
+            if (value > 1000000) { return Result.err(errors.Error.number); }
+            return Result.ok(value);
+        }
+        case Result.err(let error: num.Error) { return Result.err(errors.Error.number); }
+    }
+}
+
+pub func decode(bytes: read u8[]) -> Result<model.Command, errors.Error> {
+    var end: usize = 0;
+    while (end < bytes.len && bytes[end] != 32) { end += 1; }
+    if (end == bytes.len || end + 1 == bytes.len) { return Result.err(errors.Error.syntax); }
+    let operation_kind: model.Kind = try(kind(read bytes[0..end]));
+    var operation: model.Command = model.command(operation_kind);
+    var cursor: Cursor = Cursor(offset = end + 1);
+    operation.id = try(number(read bytes, edit cursor, operation_kind != model.Kind.remove));
+    if (operation_kind == model.Kind.remove) { return Result.ok(move(operation)); }
+    operation.amount = try(number(read bytes, edit cursor, operation_kind == model.Kind.item));
+    if (operation_kind == model.Kind.item) {
+        operation.price = try(number(read bytes, edit cursor, true));
+        let start: usize = cursor.offset;
+        if (!model.valid_name(read bytes[start..bytes.len])) { return Result.err(errors.Error.name); }
+        operation.name_length = bytes.len - start;
+        for (var index: usize = 0; index < operation.name_length; index += 1) {
+            operation.name[index] = bytes[start + index];
+        }
+    }
+    return Result.ok(move(operation));
+}

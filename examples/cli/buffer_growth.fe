@@ -1,0 +1,36 @@
+use std.io;
+use std.mem;
+
+func append_newline(buffer: edit Buffer<u8>) -> Result<usize, mem.Error> {
+    let length: usize = buffer.len;
+    match (mem.resize(edit buffer, length + 1)) {
+        case Result.ok(let count: usize) {
+            buffer[length] = 10;
+            return Result.ok(count);
+        }
+        case Result.err(let error: mem.Error) {
+            return Result.err(error);
+        }
+    }
+}
+
+func main() -> i32 {
+    match (mem.from_bytes(read "Fermi", 64)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var message: Buffer<u8> = move(allocation);
+            match (mem.reserve(edit message, 32)) {
+                case Result.ok(let capacity: usize) {}
+                case Result.err(let error: mem.Error) { return 1; }
+            }
+            match (append_newline(edit message)) {
+                case Result.ok(let length: usize) {}
+                case Result.err(let error: mem.Error) { return 1; }
+            }
+            match (io.write(read message)) {
+                case Result.ok(let written: usize) { return 0; }
+                case Result.err(let error: io.Error) { return 2; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return 1; }
+    }
+}

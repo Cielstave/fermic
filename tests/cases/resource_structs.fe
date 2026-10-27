@@ -1,0 +1,126 @@
+use std.mem;
+use std.fs;
+
+struct Packet { bytes: Buffer<u8>; code: u8; }
+struct Batch { packet: Packet; scratch: Buffer<u8>; }
+enum Message { batch(Batch), idle, }
+struct Reader { file: fs.File; bytes: Buffer<u8>; }
+
+func make_batch() -> Result<Batch, mem.Error> {
+    return Result.ok(Batch(
+        packet = Packet(bytes = try(mem.bytes(4, 32)), code = 7),
+        scratch = try(mem.bytes(4, 32))
+    ));
+}
+
+func inspect(batch: Batch) -> usize {
+    let code: u8 = batch.packet.code;
+    return widen<usize>(code) + batch.packet.bytes.len + batch.scratch.len;
+}
+
+export func lifecycle() -> Result<usize, mem.Error> {
+    let batch: Batch = try(make_batch());
+    return Result.ok(inspect(move(batch)));
+}
+
+export func partial(index: usize) -> Result<u8, mem.Error> {
+    let codes: u8[1] = [9];
+    let packet: Packet = Packet(bytes = try(mem.bytes(4, 32)), code = codes[index]);
+    return Result.ok(packet.code);
+}
+
+export func growth() -> Result<usize, mem.Error> {
+    var batch: Batch = try(make_batch());
+    batch.packet.bytes[0] = batch.packet.code;
+    let length: usize = try(mem.resize(edit batch.packet.bytes, 8));
+    return Result.ok(widen<usize>(batch.packet.bytes[0]) + length + batch.scratch.len);
+}
+
+export func replace_field() -> Result<usize, mem.Error> {
+    var batch: Batch = try(make_batch());
+    batch.packet.bytes = try(mem.bytes(4, 32));
+    return Result.ok(inspect(move(batch)));
+}
+
+export func replace_owner() -> Result<usize, mem.Error> {
+    var batch: Batch = try(make_batch());
+    batch = try(make_batch());
+    return Result.ok(inspect(move(batch)));
+}
+
+export func temporary() -> Result<u8, mem.Error> {
+    return Result.ok(try(make_batch()).packet.code);
+}
+
+export func variant(index: usize) -> Result<u8, mem.Error> {
+    let message: Message = Message.batch(try(make_batch()));
+    match (message) {
+        case Message.batch(let batch: Batch) { return Result.ok(batch.packet.bytes[index]); }
+        case Message.idle { return Result.ok(1); }
+    }
+}
+
+func combine(batch: Batch, code: u8) -> usize {
+    return inspect(move(batch)) + widen<usize>(code);
+}
+
+export func pending(index: usize) -> Result<usize, mem.Error> {
+    let batch: Batch = try(make_batch());
+    let codes: u8[1] = [1];
+    return Result.ok(combine(move(batch), codes[index]));
+}
+
+export func repeated(rounds: usize, stopping: bool) -> Result<usize, mem.Error> {
+    var count: usize = 0;
+    for (var i: usize = 0; i < rounds; i += 1) {
+        let batch: Batch = try(make_batch());
+        count += batch.packet.bytes.len;
+        if (stopping) { break; }
+        continue;
+    }
+    return Result.ok(count);
+}
+
+export func mixed(index: usize) -> Result<usize, fs.Error> {
+    match (mem.bytes(4, 32)) {
+        case Result.ok(let bytes: Buffer<u8>) {
+            var reader: Reader = Reader(file = try(fs.open_read("input")), bytes = move(bytes));
+            var output: u8[1];
+            output = [0];
+            let count: usize = try(fs.read_into(edit reader.file, edit output));
+            reader.bytes[0] = output[0];
+            return Result.ok(count + widen<usize>(reader.bytes[index]));
+        }
+        case Result.err(let error: mem.Error) { return Result.err(fs.Error.invalid_argument); }
+    }
+}
+
+export func empty() -> void {
+    var batch: Batch;
+}
+
+func file_bytes() -> Result<Buffer<u8>, fs.Error> {
+    match (mem.bytes(4, 32)) {
+        case Result.ok(let bytes: Buffer<u8>) { return Result.ok(move(bytes)); }
+        case Result.err(let error: mem.Error) { return Result.err(fs.Error.invalid_argument); }
+    }
+}
+
+export func acquire() -> Result<usize, fs.Error> {
+    let reader: Reader = Reader(file = try(fs.open_read("input")), bytes = try(file_bytes()));
+    return Result.ok(reader.bytes.len);
+}
+
+struct Envelope { batch: Batch; header: u8[1]; }
+struct Pending { message: Message; marker: usize; }
+
+export func copied_header() -> Result<usize, mem.Error> {
+    let envelope: Envelope = Envelope(batch = try(make_batch()), header = [3]);
+    let header: u8[1] = copy(envelope.header);
+    return Result.ok(widen<usize>(header[0]) + envelope.batch.packet.bytes.len);
+}
+
+export func wrapped() -> Result<usize, mem.Error> {
+    let pending: Pending = Pending(message = Message.batch(try(make_batch())), marker = 11);
+    return Result.ok(pending.marker);
+}

@@ -1,0 +1,43 @@
+use std.env;
+use std.num;
+
+pub enum Error {
+    missing,
+    invalid_name,
+    value_too_long,
+    invalid_value,
+    invalid_range,
+    out_of_range,
+}
+
+// Validate the interval before reading external state. Raw values never enter diagnostics.
+pub func usize_env(name: read u8[], minimum: usize, maximum: usize) -> Result<usize, Error> {
+    if (minimum > maximum) {
+        return Result.err(Error.invalid_range);
+    }
+    var bytes: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (env.read_into(read name, edit bytes)) {
+        case Result.ok(let length: usize) {
+            match (num.usize_range(read bytes[0..length], minimum, maximum)) {
+                case Result.ok(let value: usize) {
+                    return Result.ok(value);
+                }
+                case Result.err(let error: num.Error) {
+                    if (error == num.Error.out_of_range) {
+                        return Result.err(Error.out_of_range);
+                    }
+                    return Result.err(Error.invalid_value);
+                }
+            }
+        }
+        case Result.err(let error: env.Error) {
+            if (error == env.Error.not_found) {
+                return Result.err(Error.missing);
+            }
+            if (error == env.Error.invalid_name) {
+                return Result.err(Error.invalid_name);
+            }
+            return Result.err(Error.value_too_long);
+        }
+    }
+}

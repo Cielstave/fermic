@@ -1,0 +1,91 @@
+use "errors.fe";
+use "model.fe";
+use "parser.fe";
+use "snapshot.fe";
+use "diagnostics.fe";
+use std.fs;
+
+struct Progress { bytes: usize; commands: usize; line: usize; }
+
+func process(file: edit fs.File, state: edit model.State, progress: edit Progress) -> Result<void, errors.Error> {
+    var chunk: u8[64] = [0; 64];
+    var line: u8[128] = [0; 128];
+    var used: usize = 0;
+    while (true) {
+        var length: usize = 0;
+        match (fs.read_into(edit file, edit chunk)) {
+            case Result.ok(let count: usize) { length = count; }
+            case Result.err(let error: fs.Error) { return Result.err(errors.Error.read_failed); }
+        }
+        if (length == 0) { break; }
+        if (length > 1048576 - progress.bytes) { return Result.err(errors.Error.input_limit); }
+        progress.bytes += length;
+        for (var index: usize = 0; index < length; index += 1) {
+            if (chunk[index] == 10) {
+                if (used != 0) {
+                    if (progress.commands == 4096) { return Result.err(errors.Error.command_limit); }
+                    progress.commands += 1;
+                    let command: model.Command = try(parser.decode(read line[0..used]));
+                    try(model.apply(edit state, read command));
+                    if (!model.valid(read state)) { return Result.err(errors.Error.invariant); }
+                }
+                used = 0;
+                progress.line += 1;
+            } else {
+                if (used == line.len) { return Result.err(errors.Error.line_limit); }
+                line[used] = chunk[index];
+                used += 1;
+            }
+        }
+    }
+    if (used != 0) { return Result.err(errors.Error.truncated); }
+    return Result.ok();
+}
+
+func failure(error: errors.Error, line: usize) -> i32 {
+    match (error) {
+        case errors.Error.syntax { return diagnostics.failure(read "inventory: invalid command syntax", line, 65); }
+        case errors.Error.number { return diagnostics.failure(read "inventory: invalid numeric field", line, 65); }
+        case errors.Error.name { return diagnostics.failure(read "inventory: invalid UTF-8 item name", line, 65); }
+        case errors.Error.duplicate { return diagnostics.failure(read "inventory: duplicate item identifier", line, 65); }
+        case errors.Error.missing { return diagnostics.failure(read "inventory: item does not exist", line, 65); }
+        case errors.Error.capacity { return diagnostics.failure(read "inventory: item capacity exceeds 64", line, 65); }
+        case errors.Error.quantity { return diagnostics.failure(read "inventory: stock quantity outside range", line, 65); }
+        case errors.Error.not_empty { return diagnostics.failure(read "inventory: cannot remove nonempty item", line, 65); }
+        case errors.Error.read_failed { return diagnostics.failure(read "inventory: journal read failed", line, 74); }
+        case errors.Error.input_limit { return diagnostics.failure(read "inventory: journal exceeds 1048576 bytes", line, 65); }
+        case errors.Error.line_limit { return diagnostics.failure(read "inventory: command exceeds 128 bytes", line, 65); }
+        case errors.Error.command_limit { return diagnostics.failure(read "inventory: journal exceeds 4096 commands", line, 65); }
+        case errors.Error.truncated { return diagnostics.failure(read "inventory: incomplete final command", line, 65); }
+        case errors.Error.invariant { return diagnostics.failure(read "inventory: state invariant failed", line, 70); }
+    }
+}
+
+pub func execute(source: read u8[], destination: read u8[]) -> i32 {
+    match (fs.open_read(read source)) {
+        case Result.ok(let opened: fs.File) {
+            var input: fs.File = move(opened);
+            var state: model.State = model.initial();
+            var progress: Progress = Progress(bytes = 0, commands = 0, line = 1);
+            match (process(edit input, edit state, edit progress)) {
+                case Result.ok() {}
+                case Result.err(let error: errors.Error) { return failure(error, progress.line); }
+            }
+            match (fs.close(move(input))) {
+                case Result.ok() {}
+                case Result.err(let error: fs.Error) {
+                    return diagnostics.failure(read "inventory: journal close failed", 0, 74);
+                }
+            }
+            match (snapshot.save(read state, read destination)) {
+                case Result.ok() { return 0; }
+                case Result.err(let error: fs.Error) {
+                    return diagnostics.failure(read "inventory: snapshot write failed", 0, 74);
+                }
+            }
+        }
+        case Result.err(let error: fs.Error) {
+            return diagnostics.failure(read "inventory: journal open failed", 0, 74);
+        }
+    }
+}

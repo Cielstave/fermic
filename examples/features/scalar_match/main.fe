@@ -1,0 +1,28 @@
+use routes;
+use std.io;
+
+@effects()
+func test_route_codes() -> bool {
+    return routes.classify(0) == routes.Route.health
+        && routes.classify(1) == routes.Route.submit
+        && routes.classify(2) == routes.Route.status
+        && routes.classify(65535) == routes.Route.unknown;
+}
+
+@effects()
+func test_admission() -> bool {
+    return routes.admitted(true, true)
+        && !routes.admitted(true, false)
+        && !routes.admitted(false, true)
+        && !routes.admitted(false, false);
+}
+
+@effects(io.write)
+func main() -> i32 {
+    if (!test_route_codes() || !test_admission()) {
+        io.println(read "scalar-match: checks failed");
+        return 1;
+    }
+    io.println(read "scalar-match: checks passed");
+    return 0;
+}

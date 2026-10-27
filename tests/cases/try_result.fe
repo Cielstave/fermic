@@ -1,0 +1,87 @@
+enum Error { rejected, exhausted, }
+
+@budget(work = 100, heap = 0)
+func checked(value: u8) -> Result<u8, Error> {
+    if (value == 0) { return Result.err(Error.rejected); }
+    if (value == 255) { return Result.err(Error.exhausted); }
+    return Result.ok(value);
+}
+
+func unit(accepted: bool) -> Result<void, Error> {
+    if (!accepted) { return Result.err(Error.rejected); }
+    return Result.ok();
+}
+
+func marked(value: u8, marker: edit u8[]) -> Result<u8, Error> {
+    marker[0] += 1;
+    return checked(value);
+}
+
+func truth(accepted: bool, marker: edit u8[]) -> Result<bool, Error> {
+    marker[0] += 1;
+    if (!accepted) { return Result.err(Error.exhausted); }
+    return Result.ok(true);
+}
+
+func combine(left: u8, right: u8) -> u16 {
+    return widen<u16>(left) + widen<u16>(right);
+}
+
+@budget(work = 1000, heap = 0)
+export func scalar(value: u8) -> Result<u16, Error> {
+    let pending: Result<u8, Error> = checked(value);
+    let byte: u8 = try(pending);
+    return Result.ok(widen<u16>(byte) + 1);
+}
+
+export func ordered(left: u8, right: u8, marker: edit u8[]) -> Result<u16, Error> {
+    let value: u16 = combine(try(marked(left, edit marker)), try(marked(right, edit marker)));
+    marker[0] += 10;
+    return Result.ok(value);
+}
+
+export func conditional(gate: bool, accepted: bool, marker: edit u8[]) -> Result<bool, Error> {
+    return Result.ok(gate && try(truth(accepted, edit marker)));
+}
+
+export func alternative(gate: bool, accepted: bool, marker: edit u8[]) -> Result<bool, Error> {
+    return Result.ok(gate || try(truth(accepted, edit marker)));
+}
+
+export func validate(accepted: bool, marker: edit u8[]) -> Result<void, Error> {
+    try(unit(accepted));
+    marker[0] = 42;
+    return Result.ok();
+}
+
+export func accumulate(values: read u8[], marker: edit u8[]) -> Result<u16, Error> {
+    var total: u16 = 0;
+    for (var index: usize = 0; index < values.len; index += 1) {
+        let byte: u8 = try(marked(values[index], edit marker));
+        total += widen<u16>(byte);
+    }
+    return Result.ok(total);
+}
+
+func nested(value: u8) -> Result<Result<u8, Error>, Error> {
+    return Result.ok(checked(value));
+}
+
+export func unpack(value: u8) -> Result<u8, Error> {
+    return Result.ok(try(try(nested(value))));
+}
+
+export func assigned(value: u8, output: edit u8[], index: usize) -> Result<void, Error> {
+    output[index] = try(checked(value));
+    return Result.ok();
+}
+
+export func explicit_move(value: u8) -> Result<u8, Error> {
+    let pending: Result<u8, Error> = checked(value);
+    return Result.ok(try(move(pending)));
+}
+
+export func compound(value: u8, output: edit u8[]) -> Result<void, Error> {
+    output[0] += try(checked(value));
+    return Result.ok();
+}

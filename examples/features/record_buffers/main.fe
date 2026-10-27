@@ -1,0 +1,43 @@
+use std.buffer;
+use std.fmt;
+use std.io;
+
+struct Part { id: usize; name: str; }
+
+func total() -> Result<usize, buffer.Error> {
+    let width: usize = buffer.element_size<Part>();
+    var parts: Buffer<Part> = try(buffer.empty<Part>(width * 2048));
+    for (var index: usize = 0; index < 2048; index += 1) {
+        let length: usize = try(buffer.push<Part>(edit parts, Part(id = index, name = "part")));
+    }
+    var sum: usize = 0;
+    while (parts.len != 0) {
+        let part: Part = try(buffer.pop<Part>(edit parts));
+        if (part.name[0] != 112) { return Result.err(buffer.Error.invalid_state); }
+        sum += part.id;
+    }
+    return Result.ok(sum);
+}
+
+func failure() -> i32 {
+    match (io.write_stderr(read "record-buffers: operation failed\n")) {
+        case Result.ok(let count: usize) { return 1; }
+        case Result.err(let error: io.Error) { return 1; }
+    }
+}
+
+func main() -> i32 {
+    match (total()) {
+        case Result.ok(let sum: usize) {
+            var output: u8[20] = [0; 20];
+            match (fmt.usize_into(sum, edit output)) {
+                case Result.ok(let length: usize) {
+                    io.println(read output[0..length]);
+                    return 0;
+                }
+                case Result.err(let error: fmt.Error) { return failure(); }
+            }
+        }
+        case Result.err(let error: buffer.Error) { return failure(); }
+    }
+}

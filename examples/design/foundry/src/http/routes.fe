@@ -1,0 +1,49 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.http;
+use backend.json;
+use backend.text;
+use jobs.model;
+use jobs.service;
+use platform.app;
+use security.access;
+use storage.jobs;
+
+pub func mount(router: edit http.Router<app.App>) -> Result<void, backend.Failure> {
+    try http.route(edit router, http.Method.post, "/v1/tenants/{tenant}/jobs", create);
+    try http.route(edit router, http.Method.get, "/v1/tenants/{tenant}/jobs/{job}", fetch);
+    try http.route(edit router, http.Method.post, "/v1/tenants/{tenant}/jobs/{job}/cancel", cancel);
+    return Result.ok();
+}
+
+pub func create(application: read app.App, request: edit http.Request)
+    -> Result<http.Response, backend.Failure> {
+    let tenant: backend.Id = try http.path_id(read request, "tenant");
+    let principal: access.Principal = try access.authorize(read application, read request, tenant);
+    let key: text.String = try http.required_header(read request, "Idempotency-Key", 128);
+    // Codec rejects unknown fields, oversized lists, and non-byte integers.
+    let command: model.Submit = try json.decode<model.Submit>(edit request,
+        json.byte_samples_codec(65_536), 262_144);
+    let receipt: model.Receipt = try service.submit(read application,
+        read principal, read key, read command);
+    return http.json(202, read receipt, json.receipt_codec());
+}
+
+pub func fetch(application: read app.App, request: edit http.Request)
+    -> Result<http.Response, backend.Failure> {
+    let tenant: backend.Id = try http.path_id(read request, "tenant");
+    let principal: access.Principal = try access.authorize(read application, read request, tenant);
+    let job_id: backend.Id = try http.path_id(read request, "job");
+    let job: model.Job = try jobs.find(read application.database, principal.tenant, job_id);
+    // Public codec omits samples and internal lease state.
+    return http.json(200, read job, json.job_status_codec());
+}
+
+pub func cancel(application: read app.App, request: edit http.Request)
+    -> Result<http.Response, backend.Failure> {
+    let tenant: backend.Id = try http.path_id(read request, "tenant");
+    let principal: access.Principal = try access.authorize(read application, read request, tenant);
+    let job_id: backend.Id = try http.path_id(read request, "job");
+    let receipt: model.Receipt = try jobs.cancel(read application.database, principal.tenant, job_id);
+    return http.json(200, read receipt, json.receipt_codec());
+}

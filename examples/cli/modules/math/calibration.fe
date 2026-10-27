@@ -1,0 +1,8 @@
+// Private helpers in different modules may share a name.
+func adjust(value: i64) -> i64 {
+    return value;
+}
+
+pub func apply(value: i64, gain: i64, offset: i64) -> i64 {
+    return adjust(value) * gain + offset;
+}

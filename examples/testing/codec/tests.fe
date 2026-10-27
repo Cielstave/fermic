@@ -1,0 +1,34 @@
+use std.binary;
+use std.mem;
+
+func test_round_trip() -> bool {
+    var bytes: u8[4] = [0, 0, 0, 0];
+    match (binary.write_u32_be(305419896, edit bytes)) {
+        case Result.ok(let count: usize) {
+            if (count != 4) { return false; }
+        }
+        case Result.err(let error: binary.Error) { return false; }
+    }
+    match (binary.read_u32_be(read bytes)) {
+        case Result.ok(let value: u32) { return value == 305419896; }
+        case Result.err(let error: binary.Error) { return false; }
+    }
+}
+
+func test_short_input() -> bool {
+    match (binary.read_u32_be(read "Fe")) {
+        case Result.ok(let value: u32) { return false; }
+        case Result.err(let error: binary.Error) {
+            return error == binary.Error.input_too_short;
+        }
+    }
+}
+
+func test_owned_copy() -> bool {
+    match (mem.from_bytes(read "Fermi", 32)) {
+        case Result.ok(let buffer: Buffer<u8>) {
+            return buffer.len == 5 && buffer[0] == 70 && buffer[4] == 105;
+        }
+        case Result.err(let error: mem.Error) { return false; }
+    }
+}

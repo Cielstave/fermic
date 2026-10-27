@@ -1,0 +1,62 @@
+use std.mem;
+
+type Count = usize;
+type Total = Count;
+type Name = str;
+type Header = u8[3];
+type ReadBytes = read u8[];
+type Bytes = Buffer<u8>;
+
+enum Status { ready, stopped, }
+type State = Status;
+struct Record { count: Total; name: Name; }
+type Entry = Record;
+type Outcome = Result<Count, mem.Error>;
+
+func length(bytes: ReadBytes) -> Total { return bytes.len; }
+func identify(value: Count) -> Total { return value; }
+
+func test_scalar_alias() -> bool {
+    var count: Count = 3;
+    count += 4;
+    let result: usize = identify(count);
+    return result == 7;
+}
+
+func test_array_alias() -> bool {
+    var header: Header = [1, 2, 3];
+    header[1] = 9;
+    let duplicate: u8[3] = copy(header);
+    return length(read duplicate) == 3 && duplicate[1] == 9;
+}
+
+func test_nominal_alias() -> bool {
+    let record: Entry = Entry(count = 4, name = "worker");
+    let state: State = State.ready;
+    match (state) {
+        case State.ready { return record.count == 4 && record.name.len == 6; }
+        case State.stopped { return false; }
+    }
+}
+
+func test_resource_alias() -> bool {
+    let result: Result<Bytes, mem.Error> = mem.from_bytes(read "data", 16);
+    match (move(result)) {
+        case Result.ok(let bytes: Bytes) { return bytes.len == 4; }
+        case Result.err(let error: mem.Error) { return false; }
+    }
+}
+
+func test_result_alias() -> bool {
+    let result: Outcome = Result.ok(42);
+    match (move(result)) {
+        case Result.ok(let count: Count) { return count == 42; }
+        case Result.err(let error: mem.Error) { return false; }
+    }
+}
+
+func identity<T: integer>(value: T) -> T { return value; }
+
+func test_alias_type_argument() -> bool {
+    return identity<Count>(42) == 42;
+}

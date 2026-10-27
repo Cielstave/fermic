@@ -1,0 +1,12 @@
+struct Entry { value: usize; }
+func generate<T: integer>(value: T) -> T {
+    let values: T[4] = [value; 4];
+    return values[3];
+}
+func f() -> usize {
+    let seed: Entry = Entry(value = 7);
+    let entries: Entry[8] = [copy(seed); 8];
+    var bytes: u8[32] = [0; 32];
+    bytes[31] = generate<u8>(1);
+    return entries[7].value + widen<usize>(bytes[31]);
+}

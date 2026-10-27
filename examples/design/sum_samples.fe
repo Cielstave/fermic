@@ -1,0 +1,15 @@
+enum SumError {
+    input_too_large,
+}
+
+@budget(work = 150_000, heap = 0)
+export func sum_samples(input: read i16[]) -> Result<i64, SumError> {
+    if (input.len > 4096) {
+        return Result.err(SumError.input_too_large);
+    }
+    var total: i64 = 0;
+    for (var i: usize = 0; i < input.len; i += 1) {
+        total += widen<i64>(input[i]);
+    }
+    return Result.ok(total);
+}

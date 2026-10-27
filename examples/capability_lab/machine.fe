@@ -1,0 +1,65 @@
+use "stack_machine/machine.fe" as vm;
+use "common/output.fe";
+use std.io;
+
+func test_expression() -> bool {
+    let program: vm.Program = vm.sample();
+    match (vm.execute(read program)) {
+        case Result.ok(let value: i64) { return value == 32; }
+        case Result.err(let error: vm.Error) { return false; }
+    }
+}
+
+func test_underflow() -> bool {
+    let program: vm.Program = vm.Program(code = [vm.Instruction.add, vm.Instruction.add,
+        vm.Instruction.add, vm.Instruction.add, vm.Instruction.add, vm.Instruction.add,
+        vm.Instruction.add], length = 1);
+    match (vm.execute(read program)) {
+        case Result.ok(let value: i64) { return false; }
+        case Result.err(let error: vm.Error) { return error == vm.Error.stack_empty; }
+    }
+}
+
+func test_invalid_length() -> bool {
+    var program: vm.Program = vm.sample();
+    program.length = 8;
+    match (vm.execute(read program)) {
+        case Result.ok(let value: i64) { return false; }
+        case Result.err(let error: vm.Error) { return error == vm.Error.invalid_program; }
+    }
+}
+
+func main() -> i32 {
+    let program: vm.Program = vm.sample();
+    match (vm.execute(read program)) {
+        case Result.ok(let value: i64) {
+            match (narrow<usize>(value)) {
+                case Result.ok(let result: usize) {
+                    io.print("stack-result=");
+                    if (!output.number(result)) { return 1; }
+                    io.println("");
+                    return 0;
+                }
+                case Result.err(let error: CastError) { return 1; }
+            }
+        }
+        case Result.err(let error: vm.Error) { return 1; }
+    }
+}
+
+func test_expression_matrix() -> bool {
+    for (var left: i64 = 0; left < 20; left += 1) {
+        for (var right: i64 = 0; right < 20; right += 1) {
+            let program: vm.Program = vm.Program(code = [vm.Instruction.push(left),
+                vm.Instruction.push(right), vm.Instruction.add, vm.Instruction.push(3),
+                vm.Instruction.multiply, vm.Instruction.push(1), vm.Instruction.subtract], length = 7);
+            match (vm.execute(read program)) {
+                case Result.ok(let value: i64) {
+                    if (value != (left + right) * 3 - 1) { return false; }
+                }
+                case Result.err(let error: vm.Error) { return false; }
+            }
+        }
+    }
+    return true;
+}

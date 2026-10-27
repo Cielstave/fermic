@@ -1,0 +1,54 @@
+enum MathError { rejected, }
+struct Pair { left: i64; right: i64; }
+export func add(a: i64, b: i64) -> i64 { return a + b; }
+export func divide(a: i64, b: i64) -> i64 { return a / b; }
+export func get(data: read i16[], at: usize) -> i16 { return data[at]; }
+export func short_circuit(data: read i16[]) -> bool {
+    return data.len > 0 && data[0] > 0;
+}
+func sum_pair(pair: Pair) -> i64 { return pair.left + pair.right; }
+export func aggregates() -> i64 {
+    let a: Pair = Pair(left = 20, right = 22);
+    var b: Pair = copy(a);
+    b.left = 21;
+    return sum_pair(move(b));
+}
+func bump(data: edit i16[]) -> void { data[0] += 1; }
+func sum(data: read i16[]) -> i16 { return data[0] + data[1]; }
+export func arrays() -> i16 {
+    var data: i16[2] = [10, 20];
+    bump(edit data[0..1]);
+    return sum(read data);
+}
+export func convert(value: i64) -> Result<i16, CastError> {
+    return narrow<i16>(value);
+}
+export func handle(value: i64) -> i16 {
+    let converted: Result<i16, CastError> = narrow<i16>(value);
+    match (converted) {
+        case Result.ok(let n: i16) { return n; }
+        case Result.err(let reason: CastError) { return -1; }
+    }
+}
+export func minimum() -> i64 { return -9223372036854775808; }
+export func partial(data: edit i16[], value: i16) -> void {
+    data[0] = 99;
+    data[1] = value + 1;
+}
+export func unsigned_add(a: u8, b: u8) -> u8 { return a + b; }
+struct Container { data: i16[2]; }
+func make_data(output: edit i16[]) -> i16[2] {
+    output[0] = 7;
+    return [40, 2];
+}
+export func temporary_len(output: edit i16[]) -> usize {
+    return make_data(edit output).len;
+}
+export func temporary_index(output: edit i16[]) -> i16 {
+    return make_data(edit output)[1];
+}
+export func nested_struct() -> i16 {
+    var box: Container = Container(data = [10, 11]);
+    box.data[0] += 2;
+    return box.data[0];
+}

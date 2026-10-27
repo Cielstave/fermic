@@ -1,0 +1,27 @@
+use "routes.fe";
+use std.io;
+use std.text;
+
+func greeting() -> str {
+    return "Hello, Fermi!";
+}
+
+func test_string_values() -> bool {
+    var message: str = greeting();
+    if (message.len != 13) { return false; }
+    message = "café";
+    return message.len == 5 && text.scalar_count(message) == 4 &&
+           text.equal(message, "café");
+}
+
+func test_path_classification() -> bool {
+    return routes.classify("/jobs/42") == routes.Route.jobs &&
+           routes.classify("/reports/daily.json") == routes.Route.report &&
+           routes.classify("/jobs/report.json") == routes.Route.jobs &&
+           routes.classify("/job/42") == routes.Route.unknown;
+}
+
+func main() -> void {
+    let message: str = greeting();
+    io.println(read message);
+}

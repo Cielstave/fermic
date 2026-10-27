@@ -1,0 +1,85 @@
+use std.buffer;
+
+struct Entry { id: usize; label: str; }
+
+@effects()
+@budget(work = 1000, heap = 0)
+func resetEntries(entries: edit Buffer<Entry>) -> Result<usize, buffer.Error> {
+    return buffer.clear<Entry>(edit entries);
+}
+
+@effects()
+@budget(work = 1000, heap = 0)
+func takeLast(values: edit Buffer<u32>) -> Result<u32, buffer.Error> {
+    return buffer.pop<u32>(edit values);
+}
+
+export func reuseRecords() -> Result<bool, buffer.Error> {
+    var entries: Buffer<Entry> = try(buffer.empty<Entry>(4096));
+    let count: usize = try(buffer.push<Entry>(edit entries, Entry(id = 7, label = "first")));
+    let next: usize = try(buffer.push<Entry>(edit entries, Entry(id = 9, label = "second")));
+    let capacity: usize = entries.capacity;
+    let shorter: usize = try(buffer.truncate<Entry>(edit entries, 1));
+    if (shorter != 1 || entries.capacity != capacity || entries[0].id != 7) {
+        return Result.ok(false);
+    }
+    match (buffer.truncate<Entry>(edit entries, 2)) {
+        case Result.ok(let unexpected: usize) { return Result.ok(false); }
+        case Result.err(let error: buffer.Error) {
+            if (error != buffer.Error.invalid_argument || entries.len != 1 || entries.capacity != capacity) {
+                return Result.ok(false);
+            }
+        }
+    }
+    let cleared: usize = try(resetEntries(edit entries));
+    let again: usize = try(buffer.clear<Entry>(edit entries));
+    if (cleared != 0 || again != 0 || entries.capacity != capacity) { return Result.ok(false); }
+    let seeded: usize = try(buffer.resize_filled<Entry>(edit entries, 2, Entry(id = 11, label = "fresh")));
+    return Result.ok(seeded == 2 && entries.capacity == capacity &&
+                     entries[0].id == 11 && entries[1].id == 11 && entries[1].label.len == 5 && entries[1].label[0] == 102);
+}
+
+func testRecordReuse() -> bool {
+    match (reuseRecords()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+export func reuseScalars() -> Result<bool, buffer.Error> {
+    var values: Buffer<u32> = try(buffer.allocate<u32>(4, 16));
+    values[3] = 99;
+    let last: u32 = try(takeLast(edit values));
+    if (last != 99 || values.len != 3) { return Result.ok(false); }
+    let cleared: usize = try(buffer.clear<u32>(edit values));
+    let length: usize = try(buffer.resize<u32>(edit values, 4));
+    if (length != 4 || values[3] != 0 || values.capacity != 4) { return Result.ok(false); }
+    let same: usize = try(buffer.truncate<u32>(edit values, 4));
+    return Result.ok(same == 4 && cleared == 0);
+}
+
+func testScalarReuse() -> bool {
+    match (reuseScalars()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}
+
+export func reuseEmpty() -> Result<bool, buffer.Error> {
+    var entries: Buffer<Entry> = try(buffer.empty<Entry>(0));
+    let length: usize = try(buffer.clear<Entry>(edit entries));
+    match (buffer.truncate<Entry>(edit entries, 1)) {
+        case Result.ok(let unexpected: usize) { return Result.ok(false); }
+        case Result.err(let error: buffer.Error) {
+            return Result.ok(error == buffer.Error.invalid_argument && length == 0 &&
+                             entries.len == 0 && entries.capacity == 0);
+        }
+    }
+}
+
+func testEmptyReuse() -> bool {
+    match (reuseEmpty()) {
+        case Result.ok(let valid: bool) { return valid; }
+        case Result.err(let error: buffer.Error) { return false; }
+    }
+}

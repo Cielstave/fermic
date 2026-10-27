@@ -1,0 +1,164 @@
+use "model.fe";
+use "decoder.fe";
+use std.fs;
+use std.fmt;
+
+func number(file: edit fs.File, value: usize) -> Result<void, fs.Error> {
+    var bytes: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (fmt.usize_into(value, edit bytes)) {
+        case Result.ok(let length: usize) {
+            return fs.write_all(edit file, read bytes[0..length]);
+        }
+        case Result.err(let error: fmt.Error) {
+            return Result.err(fs.Error.invalid_state);
+        }
+    }
+}
+
+func field(file: edit fs.File, value: usize) -> Result<void, fs.Error> {
+    try(fs.write_all(edit file, read " "));
+    return number(edit file, value);
+}
+
+func reason_code(reason: model.Reason) -> usize {
+    match (reason) {
+        case model.Reason.accepted { return 0; }
+        case model.Reason.invalid_argument { return 1; }
+        case model.Reason.duplicate { return 2; }
+        case model.Reason.missing_book { return 3; }
+        case model.Reason.missing_member { return 4; }
+        case model.Reason.full { return 5; }
+        case model.Reason.blocked { return 6; }
+        case model.Reason.debt { return 7; }
+        case model.Reason.loan_limit { return 8; }
+        case model.Reason.unavailable { return 9; }
+        case model.Reason.queue_priority { return 10; }
+        case model.Reason.missing_loan { return 11; }
+        case model.Reason.overdue { return 12; }
+        case model.Reason.renewal_limit { return 13; }
+        case model.Reason.missing_hold { return 14; }
+        case model.Reason.busy { return 15; }
+    }
+}
+
+func header(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    try(fs.write_all(edit file, read "STATE"));
+    try(field(edit file, state.day));
+    try(field(edit file, state.sequence));
+    try(field(edit file, state.ticket));
+    try(field(edit file, state.counters.accepted));
+    try(field(edit file, state.counters.rejected));
+    try(field(edit file, state.counters.borrowed));
+    try(field(edit file, state.counters.returned));
+    try(field(edit file, state.counters.renewed));
+    try(field(edit file, state.counters.lost));
+    try(field(edit file, state.counters.reserved));
+    try(field(edit file, state.counters.cancelled));
+    try(field(edit file, state.counters.fulfilled));
+    try(field(edit file, state.counters.fees));
+    try(field(edit file, state.counters.paid));
+    return fs.write_all(edit file, read "\n");
+}
+
+func books(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    for (var index: usize = 0; index < state.books.len; index += 1) {
+        if (state.books[index].active) {
+            try(fs.write_all(edit file, read "BOOK"));
+            try(field(edit file, index));
+            try(field(edit file, state.books[index].id));
+            try(field(edit file, state.books[index].total));
+            try(field(edit file, state.books[index].available));
+            try(field(edit file, state.books[index].lost));
+            try(fs.write_all(edit file, read "\n"));
+        }
+    }
+    return Result.ok();
+}
+
+func members(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    for (var index: usize = 0; index < state.members.len; index += 1) {
+        if (state.members[index].active) {
+            var blocked: usize = 0;
+            if (state.members[index].blocked) {
+                blocked = 1;
+            }
+            try(fs.write_all(edit file, read "MEMBER"));
+            try(field(edit file, index));
+            try(field(edit file, state.members[index].id));
+            try(field(edit file, state.members[index].limit));
+            try(field(edit file, state.members[index].borrowed));
+            try(field(edit file, blocked));
+            try(field(edit file, state.members[index].balance));
+            try(fs.write_all(edit file, read "\n"));
+        }
+    }
+    return Result.ok();
+}
+
+func loans(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    for (var index: usize = 0; index < state.loans.len; index += 1) {
+        if (state.loans[index].active) {
+            let member: usize = state.loans[index].member;
+            let book: usize = state.loans[index].book;
+            try(fs.write_all(edit file, read "LOAN"));
+            try(field(edit file, index));
+            try(field(edit file, state.members[member].id));
+            try(field(edit file, state.books[book].id));
+            try(field(edit file, state.loans[index].due));
+            try(field(edit file, state.loans[index].renewals));
+            try(fs.write_all(edit file, read "\n"));
+        }
+    }
+    return Result.ok();
+}
+
+func holds(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    for (var index: usize = 0; index < state.holds.len; index += 1) {
+        if (state.holds[index].active) {
+            let member: usize = state.holds[index].member;
+            let book: usize = state.holds[index].book;
+            try(fs.write_all(edit file, read "HOLD"));
+            try(field(edit file, index));
+            try(field(edit file, state.holds[index].ticket));
+            try(field(edit file, state.members[member].id));
+            try(field(edit file, state.books[book].id));
+            try(fs.write_all(edit file, read "\n"));
+        }
+    }
+    return Result.ok();
+}
+
+func audit(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    var count: usize = state.sequence;
+    if (count > state.audit.len) {
+        count = state.audit.len;
+    }
+    let first: usize = state.sequence - count;
+    for (var offset: usize = 0; offset < count; offset += 1) {
+        let slot: usize = (first + offset) % state.audit.len;
+        let operation: usize = decoder.code(state.audit[slot].operation);
+        let reason: usize = reason_code(state.audit[slot].reason);
+        try(fs.write_all(edit file, read "AUDIT"));
+        try(field(edit file, state.audit[slot].sequence));
+        try(field(edit file, state.audit[slot].day));
+        try(field(edit file, operation));
+        try(field(edit file, state.audit[slot].first));
+        try(field(edit file, state.audit[slot].second));
+        try(field(edit file, state.audit[slot].third));
+        try(field(edit file, reason));
+        try(fs.write_all(edit file, read "\n"));
+    }
+    return Result.ok();
+}
+
+pub func save(state: read model.State, path: read u8[]) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    try(header(edit file, read state));
+    try(books(edit file, read state));
+    try(members(edit file, read state));
+    try(loans(edit file, read state));
+    try(holds(edit file, read state));
+    try(audit(edit file, read state));
+    try(fs.sync(edit file));
+    return fs.close(move(file));
+}

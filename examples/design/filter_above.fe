@@ -1,0 +1,33 @@
+// Compilable pilot example. Work budget uses fermi-work-1.
+enum FilterError {
+    input_too_large,
+    output_too_small,
+}
+
+@budget(work = 150_000, heap = 0)
+export func filter_above(
+    input: read i16[],
+    output: edit i16[],
+    threshold: i16
+) -> Result<usize, FilterError> {
+    if (input.len > 4096) {
+        return Result.err(FilterError.input_too_large);
+    }
+
+    if (output.len < input.len) {
+        return Result.err(FilterError.output_too_small);
+    }
+
+    var written: usize = 0;
+
+    for (var i: usize = 0; i < input.len; i += 1) {
+        let value: i16 = input[i];
+
+        if (value >= threshold) {
+            output[written] = value;
+            written += 1;
+        }
+    }
+
+    return Result.ok(written);
+}

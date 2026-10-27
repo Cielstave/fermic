@@ -1,0 +1,21 @@
+use std.mem;
+
+export func second_buffer() -> usize {
+    match (mem.bytes(2, 8)) {
+        case Result.ok(let bytes: Buffer<u8>) { return bytes.len; }
+        case Result.err(let error: mem.Error) { return 0; }
+    }
+}
+
+export func second_growth() -> usize {
+    match (mem.bytes(0, 16)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            match (mem.resize(edit buffer, 8)) {
+                case Result.ok(let length: usize) { return buffer.len; }
+                case Result.err(let error: mem.Error) { return 0; }
+            }
+        }
+        case Result.err(let error: mem.Error) { return 0; }
+    }
+}

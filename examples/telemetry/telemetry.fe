@@ -1,0 +1,51 @@
+// Wire format: "FE", version u8, count u16-le, then count samples i16-le.
+enum ParseError {
+    truncated,
+    bad_magic,
+    unsupported_version,
+    too_many_samples,
+    length_mismatch,
+    output_too_small,
+}
+
+func decode_sample(low: u8, high: u8) -> i16 {
+    let lo: i16 = widen<i16>(low);
+    let hi: i16 = widen<i16>(high);
+    if (high < 128) {
+        return hi * 256 + lo;
+    }
+    return (hi - 128) * 256 + lo - 32767 - 1;
+}
+
+@budget(work = 500_000, heap = 0)
+export func parse_samples(packet: read u8[], output: edit i16[]) -> Result<usize, ParseError> {
+    if (packet.len < 5) {
+        return Result.err(ParseError.truncated);
+    }
+    if (packet[0] != 70 || packet[1] != 69) {
+        return Result.err(ParseError.bad_magic);
+    }
+    if (packet[2] != 1) {
+        return Result.err(ParseError.unsupported_version);
+    }
+    let count: usize = widen<usize>(packet[3]) + widen<usize>(packet[4]) * 256;
+    if (count > 4096) {
+        return Result.err(ParseError.too_many_samples);
+    }
+    let required: usize = 5 + count * 2;
+    if (packet.len < required) {
+        return Result.err(ParseError.truncated);
+    }
+    if (packet.len != required) {
+        return Result.err(ParseError.length_mismatch);
+    }
+    if (output.len < count) {
+        return Result.err(ParseError.output_too_small);
+    }
+    // All rejection paths precede the first write. Every payload bit pattern is valid.
+    for (var i: usize = 0; i < count; i += 1) {
+        let offset: usize = 5 + i * 2;
+        output[i] = decode_sample(packet[offset], packet[offset + 1]);
+    }
+    return Result.ok(count);
+}

@@ -1,0 +1,81 @@
+use std.args;
+use std.io;
+use std.mem;
+use std.text;
+
+func failure(message: read u8[], status: i32) -> i32 {
+    var offset: usize = 0;
+    while (offset < message.len) {
+        match (io.write_stderr(read message[offset..message.len])) {
+            case Result.ok(let count: usize) {
+                if (count == 0) { return 74; }
+                offset += count;
+            }
+            case Result.err(let error: io.Error) { return 74; }
+        }
+    }
+    return status;
+}
+
+func compose(name: read u8[]) -> Result<text.Text, text.Error> {
+    var message: text.Text = try(text.from_utf8(read "Hello, ", 256));
+    let named_length: usize = try(text.append(edit message, read name));
+    let length: usize = try(text.append(edit message, read "!"));
+    return Result.ok(move(message));
+}
+
+func text_failure(error: text.Error) -> i32 {
+    match (error) {
+        case text.Error.invalid_utf8 { return failure(read "greeting: name is not valid UTF-8\n", 65); }
+        case text.Error.limit { return failure(read "greeting: message exceeds 256 bytes\n", 65); }
+        case text.Error.no_memory { return failure(read "greeting: text allocation failed\n", 71); }
+        case text.Error.size_overflow { return failure(read "greeting: message length overflow\n", 65); }
+        case text.Error.output_too_small { return failure(read "greeting: output buffer too small\n", 70); }
+        case text.Error.invalid_range { return failure(read "greeting: invalid text range\n", 70); }
+        case text.Error.not_found { return failure(read "greeting: text pattern not found\n", 70); }
+        case text.Error.invalid_state { return failure(read "greeting: invalid text state\n", 70); }
+    }
+}
+
+func greet(name: read u8[]) -> i32 {
+    match (compose(read name)) {
+        case Result.ok(let message: text.Text) {
+            var output: u8[256] = [0; 256];
+            match (text.copy_into(read message, edit output)) {
+                case Result.ok(let count: usize) {
+                    io.println(read output[0..count]);
+                    return 0;
+                }
+                case Result.err(let error: text.Error) { return text_failure(error); }
+            }
+        }
+        case Result.err(let error: text.Error) { return text_failure(error); }
+    }
+}
+
+func run() -> Result<i32, mem.Error> {
+    var name: Buffer<u8> = try(mem.bytes(256, 256));
+    match (args.read_into(0, edit name)) {
+        case Result.ok(let count: usize) { return Result.ok(greet(read name[0..count])); }
+        case Result.err(let error: args.Error) {
+            return Result.ok(failure(read "greeting: name argument exceeds the input buffer\n", 64));
+        }
+    }
+}
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 1) { return failure(read "usage: greeting NAME\n", 64); }
+        }
+        case Result.err(let error: args.Error) {
+            return failure(read "greeting: process arguments unavailable\n", 71);
+        }
+    }
+    match (run()) {
+        case Result.ok(let status: i32) { return status; }
+        case Result.err(let error: mem.Error) {
+            return failure(read "greeting: argument allocation failed\n", 71);
+        }
+    }
+}

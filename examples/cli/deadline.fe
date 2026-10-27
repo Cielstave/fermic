@@ -1,0 +1,20 @@
+use std.time;
+use std.io;
+
+func main() -> i32 {
+    match (time.monotonic_ns()) {
+        case Result.ok(let now: usize) {
+            match (time.deadline_after(now, 1_000_000_000)) {
+                case Result.ok(let deadline: usize) {
+                    if (time.remaining_ns(deadline, now) != 1_000_000_000) { return 70; }
+                }
+                case Result.err(let error: time.Error) { return 70; }
+            }
+        }
+        case Result.err(let error: time.Error) { return 71; }
+    }
+    match (io.write(read "monotonic deadline initialized\n")) {
+        case Result.ok(let count: usize) { return 0; }
+        case Result.err(let error: io.Error) { return 74; }
+    }
+}

@@ -1,0 +1,18 @@
+use std.mem;
+
+// Expected E_EFFECT: releasing an owned buffer contributes the memory effect.
+@effects()
+func discard(buffer: Buffer<u8>) -> void {
+}
+
+func main() -> i32 {
+    match (mem.bytes(8, 8)) {
+        case Result.ok(let buffer: Buffer<u8>) {
+            discard(move(buffer));
+            return 0;
+        }
+        case Result.err(let error: mem.Error) {
+            return 1;
+        }
+    }
+}

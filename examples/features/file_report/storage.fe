@@ -1,0 +1,10 @@
+use std.fs;
+
+// Creation refuses an existing path. A later failure may leave partial output.
+@effects(fs.open, fs.close, fs.write, fs.sync)
+pub func save(path: read u8[]) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    try(fs.write_all(edit file, read "status=ready\nqueued=0\n"));
+    try(fs.sync(edit file));
+    return fs.close(move(file));
+}

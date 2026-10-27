@@ -1,0 +1,15 @@
+func touch(buffer: edit Buffer<u8>) -> usize {
+    if (buffer.len > 0) {
+        buffer[0] = 7;
+    }
+    return buffer.len + buffer.capacity;
+}
+
+func forward(buffer: edit Buffer<u8>) -> usize {
+    return touch(edit buffer);
+}
+
+func own(buffer: Buffer<u8>) -> usize {
+    var local: Buffer<u8> = move(buffer);
+    return forward(edit local);
+}

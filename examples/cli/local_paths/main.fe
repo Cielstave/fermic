@@ -1,0 +1,7 @@
+use app.worker;
+use std.io;
+
+func main() -> void {
+    if (worker.result() != 42) { return; }
+    io.println(read "local imports: 42");
+}

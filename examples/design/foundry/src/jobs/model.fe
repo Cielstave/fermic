@@ -1,0 +1,46 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use std.collections;
+use backend;
+
+pub enum State {
+    queued,
+    running,
+    succeeded,
+    failed,
+    cancelled,
+}
+
+pub struct Submit {
+    samples: collections.Vec<u8>;
+}
+
+pub struct Receipt {
+    job_id: backend.Id;
+    state: State;
+}
+
+pub struct Histogram {
+    bins: u32[256];
+    count: usize;
+}
+
+pub struct Job {
+    tenant_id: backend.Id;
+    job_id: backend.Id;
+    state: State;
+    samples: collections.Vec<u8>;
+    result: backend.Option<Histogram>;
+}
+
+pub struct Lease {
+    job: Job;
+    token: backend.Id;
+    attempt: u32;
+}
+
+pub func validate(command: read Submit) -> Result<void, backend.Failure> {
+    if (command.samples.len == 0 || command.samples.len > 65_536) {
+        return Result.err(backend.failure(backend.Code.invalid_samples));
+    }
+    return Result.ok();
+}

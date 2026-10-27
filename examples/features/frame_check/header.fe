@@ -1,0 +1,35 @@
+use std.binary;
+
+pub enum Error {
+    truncated,
+    unsupported_version,
+    payload_limit,
+}
+
+pub struct Header {
+    version: u8;
+    payload_length: u32;
+}
+
+// The wire header is one version byte followed by a big-endian payload length.
+@effects()
+pub func decode(input: read u8[]) -> Result<Header, Error> {
+    if (input.len < 5) {
+        return Result.err(Error.truncated);
+    }
+    if (input[0] != 1) {
+        return Result.err(Error.unsupported_version);
+    }
+
+    match (binary.read_u32_be(read input[1..5])) {
+        case Result.ok(let length: u32) {
+            if (length > 65536) {
+                return Result.err(Error.payload_limit);
+            }
+            return Result.ok(Header(version = input[0], payload_length = length));
+        }
+        case Result.err(let error: binary.Error) {
+            return Result.err(Error.truncated);
+        }
+    }
+}

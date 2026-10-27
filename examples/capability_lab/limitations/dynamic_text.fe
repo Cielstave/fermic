@@ -1,0 +1,2 @@
+// Intentionally rejected: bytes are not a validated, lifetime-safe str.
+func retain(bytes: read u8[]) -> str { return bytes; }

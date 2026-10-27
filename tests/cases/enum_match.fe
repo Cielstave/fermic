@@ -1,0 +1,59 @@
+enum State { idle, running, stopped, }
+
+@budget(work = 100, heap = 0)
+func label(state: State) -> i32 {
+    match (state) {
+        case State.stopped { return -1; }
+        case State.idle { return 0; }
+        case State.running { return 1; }
+    }
+}
+
+export func labels() -> bool {
+    let state: State = State.running;
+    return label(State.idle) == 0 && label(state) == 1 &&
+           label(State.stopped) == -1 && state == State.running;
+}
+
+export func initialized(accept: bool) -> i32 {
+    var state: State = State.idle;
+    if (accept) { state = State.running; }
+    var value: i32;
+    match (state) {
+        case State.running { value = 42; }
+        case State.stopped { return -1; }
+        case State.idle { value = 7; }
+    }
+    return value;
+}
+
+func observe(calls: edit i32[]) -> State {
+    calls[0] += 1;
+    return State.running;
+}
+
+export func once(calls: edit i32[]) -> i32 {
+    match (observe(edit calls)) {
+        case State.idle { return 0; }
+        case State.running { return calls[0]; }
+        case State.stopped { return -1; }
+    }
+}
+
+export func nested() -> i32 {
+    var total: i32 = 0;
+    for (var i: usize = 0; i < 3; i += 1) {
+        match (State.running) {
+            case State.idle { total -= 10; }
+            case State.running {
+                match (State.stopped) {
+                    case State.idle { total -= 10; }
+                    case State.running { total -= 10; }
+                    case State.stopped { total += 2; }
+                }
+            }
+            case State.stopped { total -= 10; }
+        }
+    }
+    return total;
+}

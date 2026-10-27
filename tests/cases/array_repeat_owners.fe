@@ -1,0 +1,29 @@
+use std.mem;
+
+struct Packet { bytes: Buffer<u8>; code: u8; }
+
+func packet() -> Result<Packet, mem.Error> {
+    return Result.ok(Packet(bytes = try(mem.bytes(4, 4)), code = 7));
+}
+
+export func repeated_owner() -> Result<usize, mem.Error> {
+    let values: u8[4] = [try(packet()).code; 4];
+    return Result.ok(widen<usize>(values[0]) + widen<usize>(values[3]));
+}
+
+export func repeated_fault(index: usize) -> Result<usize, mem.Error> {
+    let owner: Buffer<u8> = try(mem.bytes(4, 4));
+    let source: u8[1] = [7];
+    let values: u8[4] = [source[index]; 4];
+    return Result.ok(widen<usize>(values[3]) + owner.len);
+}
+
+func failure() -> Result<u8, mem.Error> {
+    return Result.err(mem.Error.invalid_argument);
+}
+
+export func repeated_error() -> Result<usize, mem.Error> {
+    let owner: Buffer<u8> = try(mem.bytes(4, 4));
+    let values: u8[4] = [try(failure()); 4];
+    return Result.ok(widen<usize>(values[3]) + owner.len);
+}

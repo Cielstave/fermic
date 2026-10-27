@@ -1,0 +1,20 @@
+use std.io;
+use std.mem;
+
+func main() -> i32 {
+    match (mem.from_bytes(read "Fermi\n", 64)) {
+        case Result.ok(let message: Buffer<u8>) {
+            match (io.write(read message)) {
+                case Result.ok(let written: usize) {
+                    return 0;
+                }
+                case Result.err(let error: io.Error) {
+                    return 2;
+                }
+            }
+        }
+        case Result.err(let error: mem.Error) {
+            return 1;
+        }
+    }
+}

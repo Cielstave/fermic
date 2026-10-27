@@ -1,0 +1,25 @@
+pub enum Error {
+    clock_failed,
+    invalid_reading,
+    overflow,
+}
+
+// Nanoseconds from an unspecified monotonic origin, not calendar time.
+pub native func monotonic_ns() -> Result<usize, Error>;
+
+@budget(work = 100, heap = 0)
+pub func deadline_after(now_ns: usize, timeout_ns: usize) -> Result<usize, Error> {
+    if (timeout_ns > 18_446_744_073_709_551_615 - now_ns) {
+        return Result.err(Error.overflow);
+    }
+    return Result.ok(now_ns + timeout_ns);
+}
+
+// Saturate at zero once the deadline is reached; never subtract in that case.
+@budget(work = 100, heap = 0)
+pub func remaining_ns(deadline_ns: usize, now_ns: usize) -> usize {
+    if (now_ns >= deadline_ns) {
+        return 0;
+    }
+    return deadline_ns - now_ns;
+}

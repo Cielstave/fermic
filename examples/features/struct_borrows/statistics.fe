@@ -1,0 +1,15 @@
+pub struct Summary {
+    count: usize;
+    total: u64;
+    peak: u32;
+}
+
+@effects()
+pub func record(summary: edit Summary, value: u32) -> void {
+    summary.count += 1;
+    summary.total += widen<u64>(value);
+    if (value > summary.peak) { summary.peak = value; }
+}
+
+@effects()
+pub func total(summary: read Summary) -> u64 { return summary.total; }

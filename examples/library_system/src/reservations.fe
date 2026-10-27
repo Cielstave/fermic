@@ -1,0 +1,43 @@
+use "model.fe";
+use "lookup.fe";
+
+pub func place(state: edit model.State, member_id: usize, book_id: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    if (state.members[member].blocked) {
+        return Result.err(model.Reason.blocked);
+    }
+    if (state.members[member].balance != 0) {
+        return Result.err(model.Reason.debt);
+    }
+    match (lookup.loan(read state, member, book)) {
+        case Result.ok(let slot: usize) {
+            return Result.err(model.Reason.duplicate);
+        }
+        case Result.err(let error: model.Reason) {}
+    }
+    match (lookup.hold(read state, member, book)) {
+        case Result.ok(let slot: usize) {
+            return Result.err(model.Reason.duplicate);
+        }
+        case Result.err(let error: model.Reason) {}
+    }
+    if (lookup.hold_count(read state, member) >= 4) {
+        return Result.err(model.Reason.full);
+    }
+    let slot: usize = try(lookup.free_hold(read state));
+    state.ticket += 1;
+    let ticket: usize = state.ticket;
+    state.holds[slot] = model.Hold(active = true, member = member, book = book, ticket = ticket);
+    state.counters.reserved += 1;
+    return Result.ok();
+}
+
+pub func cancel(state: edit model.State, member_id: usize, book_id: usize) -> Result<void, model.Reason> {
+    let member: usize = try(lookup.member(read state, member_id));
+    let book: usize = try(lookup.book(read state, book_id));
+    let slot: usize = try(lookup.hold(read state, member, book));
+    state.holds[slot].active = false;
+    state.counters.cancelled += 1;
+    return Result.ok();
+}

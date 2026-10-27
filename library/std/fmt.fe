@@ -1,0 +1,80 @@
+pub enum Error {
+    output_too_small,
+}
+
+// The remainder is in 0..9; narrowing cannot fail.
+@budget(work = 100, heap = 0)
+func decimal_byte(value: usize) -> u8 {
+    match (narrow<u8>(value % 10)) {
+        case Result.ok(let byte: u8) { return byte + 48; }
+        case Result.err(let error: CastError) { return 48; }
+    }
+}
+
+// Canonical decimal ASCII, no terminator. Validate capacity before writing.
+@budget(work = 3000, heap = 0)
+pub func usize_into(value: usize, output: edit u8[]) -> Result<usize, Error> {
+    var remaining: usize = value;
+    var digits: usize = 1;
+    for (var index: usize = 0; index < 19; index += 1) {
+        if (remaining >= 10) {
+            remaining = remaining / 10;
+            digits += 1;
+        }
+    }
+    if (output.len < digits) {
+        return Result.err(Error.output_too_small);
+    }
+    remaining = value;
+    for (var index: usize = 0; index < 20; index += 1) {
+        if (index < digits) {
+            output[digits - index - 1] = decimal_byte(remaining);
+            remaining = remaining / 10;
+        }
+    }
+    return Result.ok(digits);
+}
+
+// A nonpositive remainder has magnitude at most nine, including for i64 minimum.
+@budget(work = 100, heap = 0)
+func signed_decimal_byte(value: i64) -> u8 {
+    match (narrow<u8>(-(value % 10))) {
+        case Result.ok(let byte: u8) { return byte + 48; }
+        case Result.err(let error: CastError) { return 48; }
+    }
+}
+
+// Keep the magnitude negative to represent every signed value without overflow.
+@budget(work = 4000, heap = 0)
+pub func i64_into(value: i64, output: edit u8[]) -> Result<usize, Error> {
+    var remaining: i64 = value;
+    if (remaining > 0) { remaining = -remaining; }
+    let magnitude: i64 = remaining;
+    var digits: usize = 1;
+    for (var index: usize = 0; index < 18; index += 1) {
+        if (remaining <= -10) {
+            remaining = remaining / 10;
+            digits += 1;
+        }
+    }
+    var sign: usize = 0;
+    if (value < 0) { sign = 1; }
+    let length: usize = digits + sign;
+    if (output.len < length) {
+        return Result.err(Error.output_too_small);
+    }
+    if (sign != 0) { output[0] = 45; }
+    remaining = magnitude;
+    for (var index: usize = 0; index < 19; index += 1) {
+        if (index < digits) {
+            output[length - index - 1] = signed_decimal_byte(remaining);
+            remaining = remaining / 10;
+        }
+    }
+    return Result.ok(length);
+}
+
+@budget(work = 5000, heap = 0)
+pub func i32_into(value: i32, output: edit u8[]) -> Result<usize, Error> {
+    return i64_into(widen<i64>(value), edit output);
+}

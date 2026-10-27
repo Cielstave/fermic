@@ -1,0 +1,5 @@
+use "../lib/value.fe";
+
+pub func result() -> i32 {
+    return value.answer();
+}

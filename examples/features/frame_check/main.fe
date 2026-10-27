@@ -1,0 +1,64 @@
+use header;
+use std.io;
+
+@effects()
+func test_valid_header() -> bool {
+    let input: u8[5] = [1, 0, 0, 0, 7];
+    match (header.decode(read input)) {
+        case Result.ok(let value: header.Header) {
+            return value.version == 1 && value.payload_length == 7;
+        }
+        case Result.err(let error: header.Error) {
+            return false;
+        }
+    }
+}
+
+@effects()
+func test_truncated_header() -> bool {
+    match (header.decode(read "Fe")) {
+        case Result.ok(let value: header.Header) {
+            return false;
+        }
+        case Result.err(let error: header.Error) {
+            return error == header.Error.truncated;
+        }
+    }
+}
+
+@effects()
+func test_unsupported_version() -> bool {
+    let input: u8[5] = [2, 0, 0, 0, 7];
+    match (header.decode(read input)) {
+        case Result.ok(let value: header.Header) {
+            return false;
+        }
+        case Result.err(let error: header.Error) {
+            return error == header.Error.unsupported_version;
+        }
+    }
+}
+
+@effects()
+func test_payload_limit() -> bool {
+    let input: u8[5] = [1, 0, 1, 0, 1];
+    match (header.decode(read input)) {
+        case Result.ok(let value: header.Header) {
+            return false;
+        }
+        case Result.err(let error: header.Error) {
+            return error == header.Error.payload_limit;
+        }
+    }
+}
+
+@effects(io.write)
+func main() -> i32 {
+    if (!test_valid_header() || !test_truncated_header()
+        || !test_unsupported_version() || !test_payload_limit()) {
+        io.println(read "frame-check: validation failed");
+        return 1;
+    }
+    io.println(read "frame-check: all header checks passed");
+    return 0;
+}

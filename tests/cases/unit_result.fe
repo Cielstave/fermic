@@ -1,0 +1,51 @@
+enum Error { rejected, }
+
+@budget(work = 100, heap = 0)
+func validate(accepted: bool) -> Result<void, Error> {
+    if (!accepted) { return Result.err(Error.rejected); }
+    return Result.ok();
+}
+
+export func checked(accepted: bool) -> Result<void, Error> {
+    return validate(accepted);
+}
+
+@budget(work = 200, heap = 0)
+export func handled(accepted: bool) -> i32 {
+    var status: i32;
+    let result: Result<void, Error> = validate(accepted);
+    match (result) {
+        case Result.err(let error: Error) { status = 7; }
+        case Result.ok() { status = 9; }
+    }
+    return status;
+}
+
+func forwarded(result: Result<void, Error>) -> Result<void, Error> {
+    return move(result);
+}
+
+export func forward(accepted: bool) -> Result<void, Error> {
+    return forwarded(validate(accepted));
+}
+
+export func partial(output: edit u8[], index: usize) -> Result<void, Error> {
+    output[index] = 11;
+    return Result.ok();
+}
+
+func nested(accepted: bool) -> Result<Result<void, Error>, Error> {
+    return Result.ok(validate(accepted));
+}
+
+export func nested_status(accepted: bool) -> i32 {
+    match (nested(accepted)) {
+        case Result.ok(let inner: Result<void, Error>) {
+            match (inner) {
+                case Result.ok() { return 9; }
+                case Result.err(let error: Error) { return 7; }
+            }
+        }
+        case Result.err(let error: Error) { return 3; }
+    }
+}

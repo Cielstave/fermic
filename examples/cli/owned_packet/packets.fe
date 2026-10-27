@@ -1,0 +1,13 @@
+use std.mem;
+
+pub struct Packet {
+    sequence: u32;
+    payload: Buffer<u8>;
+}
+
+pub func create(sequence: u32) -> Result<Packet, mem.Error> {
+    return Result.ok(Packet(
+        sequence = sequence,
+        payload = try(mem.from_bytes("Worker ready.\n", 64))
+    ));
+}

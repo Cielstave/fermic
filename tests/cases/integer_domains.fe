@@ -1,0 +1,62 @@
+use std.bits;
+
+@effects()
+@budget(work = 100, heap = 0)
+func negate<T: signed_integer>(value: T) -> T {
+    return -value;
+}
+
+@effects()
+func test_signed_widths() -> bool {
+    return negate<i8>(-127) == 127
+        && negate<i16>(-32767) == 32767
+        && negate<i32>(-2147483647) == 2147483647
+        && negate<i64>(-9223372036854775807) == 9223372036854775807;
+}
+
+@effects()
+func test_unsigned_widths() -> bool {
+    return bits.set<u8>(0, 255) == 255
+        && bits.set<u16>(0, 65535) == 65535
+        && bits.set<u32>(0, 4294967295) == 4294967295
+        && bits.set<u64>(0, 18446744073709551615) == 18446744073709551615
+        && bits.set<usize>(0, 18446744073709551615) == 18446744073709551615;
+}
+
+@effects()
+func test_complement_widths() -> bool {
+    return bits.clear<u8>(255, 128) == 127
+        && bits.clear<u16>(65535, 32768) == 32767
+        && bits.clear<u32>(4294967295, 2147483648) == 2147483647
+        && bits.clear<u64>(18446744073709551615, 9223372036854775808) == 9223372036854775807
+        && bits.clear<usize>(18446744073709551615, 9223372036854775808) == 9223372036854775807;
+}
+
+@effects()
+func test_byte_masks() -> bool {
+    for (var index: usize = 0; index < 256; index += 1) {
+        match (narrow<u8>(index)) {
+            case Result.ok(let value: u8) {
+                if (bits.toggle<u8>(value, 255) != 255 - value) {
+                    return false;
+                }
+                if (bits.set<u8>(value, 255) != 255 || bits.clear<u8>(value, 255) != 0) {
+                    return false;
+                }
+                if (!bits.has_all<u8>(value, 0) || bits.has_any<u8>(value, 0)) {
+                    return false;
+                }
+                if (bits.has_all<u8>(value, 255) != (value == 255)) {
+                    return false;
+                }
+                if (!bits.has_all<u8>(value, value) || bits.has_any<u8>(value, 255) != (value != 0)) {
+                    return false;
+                }
+            }
+            case Result.err(let error: CastError) {
+                return false;
+            }
+        }
+    }
+    return true;
+}

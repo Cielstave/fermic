@@ -1,0 +1,14 @@
+pub enum Error {
+    write_failed,
+    read_failed,
+}
+
+pub native func write(bytes: read u8[]) -> Result<usize, Error>;
+
+pub native func read_into(bytes: edit u8[]) -> Result<usize, Error>;
+
+pub native func write_stderr(bytes: read u8[]) -> Result<usize, Error>;
+
+// Convenience output: a write failure raises runtime fault 5.
+pub native func print(bytes: read u8[]) -> void;
+pub native func println(bytes: read u8[]) -> void;

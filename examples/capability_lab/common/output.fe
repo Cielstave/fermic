@@ -1,0 +1,13 @@
+use std.fmt;
+use std.io;
+
+pub func number(value: usize) -> bool {
+    var digits: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (fmt.usize_into(value, edit digits)) {
+        case Result.ok(let length: usize) {
+            io.print(read digits[0..length]);
+            return true;
+        }
+        case Result.err(let error: fmt.Error) { return false; }
+    }
+}

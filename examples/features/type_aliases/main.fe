@@ -1,0 +1,15 @@
+use "types.fe";
+use std.io;
+
+func completed(report: types.Report) -> types.Count {
+    return report.completed;
+}
+
+func test_public_aliases() -> bool {
+    let report: types.Report = types.Report(completed = 7, service = "worker");
+    return completed(copy(report)) == 7 && report.service.len == 6;
+}
+
+func main() -> void {
+    io.println("type-aliases: ready");
+}

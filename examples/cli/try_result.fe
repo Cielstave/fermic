@@ -1,0 +1,25 @@
+use std.io;
+use std.num;
+
+// Validate limits before creating a worker pool.
+@budget(work = 5000, heap = 0)
+func worker_limit(value: read u8[]) -> Result<usize, num.Error> {
+    let count: usize = try(num.parse_usize(read value));
+    if (count == 0 || count > 64) {
+        return Result.err(num.Error.out_of_range);
+    }
+    return Result.ok(count);
+}
+
+func main() -> i32 {
+    match (worker_limit("8")) {
+        case Result.ok(let count: usize) {
+            io.println("Worker limit accepted.");
+            return 0;
+        }
+        case Result.err(let error: num.Error) {
+            io.println("Worker limit rejected.");
+            return 1;
+        }
+    }
+}

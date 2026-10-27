@@ -1,0 +1,76 @@
+use std.args;
+use std.io;
+use std.mem;
+use std.num;
+use report;
+
+enum Error { usage, arguments_unavailable, }
+
+func input_limit() -> Result<usize, Error> {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 1) { return Result.err(Error.usage); }
+        }
+        case Result.err(let error: args.Error) {
+            return Result.err(Error.arguments_unavailable);
+        }
+    }
+    var value: u8[20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    match (args.read_into(0, edit value)) {
+        case Result.ok(let length: usize) {
+            match (num.parse_usize(read value[0..length])) {
+                case Result.ok(let limit: usize) { return Result.ok(limit); }
+                case Result.err(let error: num.Error) { return Result.err(Error.usage); }
+            }
+        }
+        case Result.err(let error: args.Error) {
+            if (error == args.Error.output_too_small || error == args.Error.out_of_range) {
+                return Result.err(Error.usage);
+            }
+            return Result.err(Error.arguments_unavailable);
+        }
+    }
+}
+
+func consume(limit: usize, buffer: edit u8[]) -> i32 {
+    var total: usize = 0;
+    while (true) {
+        match (io.read_into(edit buffer)) {
+            case Result.ok(let count: usize) {
+                if (count == 0) { return report.count(total); }
+                if (count > limit - total) {
+                    return report.failure(read "bytecount: input exceeds configured byte limit\n", 65);
+                }
+                total += count;
+            }
+            case Result.err(let error: io.Error) {
+                return report.failure(read "bytecount: cannot read standard input\n", 74);
+            }
+        }
+    }
+    return 70;
+}
+
+func run(limit: usize) -> i32 {
+    match (mem.bytes(4096, 4096)) {
+        case Result.ok(let allocation: Buffer<u8>) {
+            var buffer: Buffer<u8> = move(allocation);
+            return consume(limit, edit buffer);
+        }
+        case Result.err(let error: mem.Error) {
+            return report.failure(read "bytecount: cannot allocate input buffer\n", 71);
+        }
+    }
+}
+
+func main() -> i32 {
+    match (input_limit()) {
+        case Result.ok(let limit: usize) { return run(limit); }
+        case Result.err(let error: Error) {
+            if (error == Error.usage) {
+                return report.failure(read "usage: bytecount MAX_BYTES\n", 64);
+            }
+            return report.failure(read "bytecount: process arguments are unavailable\n", 71);
+        }
+    }
+}

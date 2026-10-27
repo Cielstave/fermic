@@ -1,0 +1,30 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.database;
+use backend.identity;
+use backend.limits;
+use platform.config;
+
+pub struct App {
+    database: database.Pool;
+    identity: identity.Verifier;
+    limiter: limits.SharedLimiter;
+}
+
+pub func open(settings: read config.Settings) -> Result<App, backend.Failure> {
+    // Earlier resources close if a later initialization fails.
+    let pool: database.Pool = try database.connect(read settings.database);
+    let verifier: identity.Verifier = try identity.open(read settings.identity);
+    let limiter: limits.SharedLimiter = try limits.connect(read settings.limits);
+    return Result.ok(App {
+        database: move(pool),
+        identity: move(verifier),
+        limiter: move(limiter),
+    });
+}
+
+pub func ready(application: read App) -> Result<void, backend.Failure> {
+    try database.ping(read application.database, 250);
+    try limits.ping(read application.limiter, 250);
+    return identity.ready(read application.identity);
+}

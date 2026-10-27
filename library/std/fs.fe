@@ -1,0 +1,37 @@
+// Opaque owning resource. Only the trusted standard library may declare it.
+pub native struct File;
+
+pub enum Error {
+    invalid_argument,
+    invalid_state,
+    invalid_path,
+    path_too_long,
+    open_failed,
+    inspect_failed,
+    not_regular,
+    read_failed,
+    close_failed,
+    write_failed,
+    sync_failed,
+}
+
+pub native func open_read(path: read u8[]) -> Result<File, Error>;
+pub native func read_into(file: edit File, output: edit u8[]) -> Result<usize, Error>;
+
+// Consumes the owner even on failure. Automatic cleanup is a fallback only.
+pub native func close(file: File) -> Result<void, Error>;
+
+// Create without replacing an existing path. Initial permissions are owner-only.
+pub native func create_new(path: read u8[]) -> Result<File, Error>;
+pub native func write(file: edit File, input: read u8[]) -> Result<usize, Error>;
+pub native func sync(file: edit File) -> Result<void, Error>;
+
+// Complete short writes. Failure can leave a prefix written; there is no rollback.
+pub func write_all(file: edit File, input: read u8[]) -> Result<void, Error> {
+    var offset: usize = 0;
+    while (offset < input.len) {
+        let count: usize = try(write(edit file, read input[offset..input.len]));
+        offset += count;
+    }
+    return Result.ok();
+}

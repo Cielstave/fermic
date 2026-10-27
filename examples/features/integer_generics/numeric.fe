@@ -1,0 +1,18 @@
+@effects()
+pub func larger<T: integer>(left: T, right: T) -> T {
+    if (left > right) {
+        return left;
+    }
+    return right;
+}
+
+// A view keeps its concrete element type and never allocates storage.
+@effects()
+pub func contains<T: integer>(values: read T[], expected: T) -> bool {
+    for (var index: usize = 0; index < values.len; index += 1) {
+        if (values[index] == expected) {
+            return true;
+        }
+    }
+    return false;
+}

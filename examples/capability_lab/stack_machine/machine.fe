@@ -1,0 +1,41 @@
+pub enum Instruction { push(i64), add, subtract, multiply, }
+pub enum Error { stack_empty, stack_full, invalid_program, }
+pub struct Program { code: Instruction[7]; length: usize; }
+
+pub func execute(program: read Program) -> Result<i64, Error> {
+    if (program.length > program.code.len) { return Result.err(Error.invalid_program); }
+    var stack: i64[8] = [0, 0, 0, 0, 0, 0, 0, 0];
+    var depth: usize = 0;
+    for (var index: usize = 0; index < program.length; index += 1) {
+        match (copy(program.code[index])) {
+            case Instruction.push(let value: i64) {
+                if (depth == stack.len) { return Result.err(Error.stack_full); }
+                stack[depth] = value;
+                depth += 1;
+            }
+            case Instruction.add {
+                if (depth < 2) { return Result.err(Error.stack_empty); }
+                stack[depth - 2] += stack[depth - 1];
+                depth -= 1;
+            }
+            case Instruction.subtract {
+                if (depth < 2) { return Result.err(Error.stack_empty); }
+                stack[depth - 2] -= stack[depth - 1];
+                depth -= 1;
+            }
+            case Instruction.multiply {
+                if (depth < 2) { return Result.err(Error.stack_empty); }
+                stack[depth - 2] *= stack[depth - 1];
+                depth -= 1;
+            }
+        }
+    }
+    if (depth != 1) { return Result.err(Error.invalid_program); }
+    return Result.ok(stack[0]);
+}
+
+pub func sample() -> Program {
+    return Program(code = [Instruction.push(9), Instruction.push(4), Instruction.subtract,
+                           Instruction.push(6), Instruction.multiply, Instruction.push(2),
+                           Instruction.add], length = 7);
+}

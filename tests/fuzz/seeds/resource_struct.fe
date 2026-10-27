@@ -1,0 +1,12 @@
+struct Packet { bytes: Buffer<u8>; code: u8; }
+struct Batch { packet: Packet; count: usize; }
+enum Message { batch(Batch), idle, }
+func create(bytes: Buffer<u8>) -> Message {
+    return Message.batch(Batch(packet = Packet(bytes = move(bytes), code = 7), count = 1));
+}
+func grow(bytes: edit Buffer<u8>) -> void { bytes[0] = 1; }
+func inspect(batch: Batch) -> u8 {
+    var owned: Batch = move(batch);
+    grow(edit owned.packet.bytes);
+    return owned.packet.code + owned.packet.bytes[0];
+}

@@ -1,0 +1,23 @@
+use std.mem;
+use std.io;
+
+func main() -> i32 {
+    let allocated: Result<Buffer<u8>, mem.Error> = mem.bytes(6, 1024);
+    match (allocated) {
+        case Result.ok(let owned: Buffer<u8>) {
+            var message: Buffer<u8> = move(owned);
+            message[0] = 70;
+            message[1] = 101;
+            message[2] = 114;
+            message[3] = 109;
+            message[4] = 105;
+            message[5] = 10;
+            let written: Result<usize, io.Error> = io.write(read message);
+            match (written) {
+                case Result.ok(let count: usize) { return 0; }
+                case Result.err(let reason: io.Error) { return 2; }
+            }
+        }
+        case Result.err(let reason: mem.Error) { return 1; }
+    }
+}

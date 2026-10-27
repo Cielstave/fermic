@@ -1,0 +1,12 @@
+pub enum Error {
+    unavailable,
+    out_of_range,
+    output_too_small,
+    invalid_argument,
+}
+
+// User arguments only; the executable name is excluded.
+pub native func count() -> Result<usize, Error>;
+
+// Copy the whole argument without a terminator. Errors preserve output.
+pub native func read_into(index: usize, output: edit u8[]) -> Result<usize, Error>;

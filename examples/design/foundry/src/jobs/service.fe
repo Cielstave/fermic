@@ -1,0 +1,42 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.database;
+use backend.digest;
+use backend.queue;
+use backend.text;
+use jobs.model;
+use platform.app;
+use security.access;
+use storage.jobs;
+
+pub func submit(application: read app.App, principal: read access.Principal,
+    key: read text.String, command: read model.Submit)
+    -> Result<model.Receipt, backend.Failure> {
+    try model.validate(read command);
+    try queue.validate_key(read key, 128);
+    let fingerprint: digest.Hash = digest.job_submission_v1(principal.tenant,
+        read command.samples);
+    var transaction: database.Transaction = try database.begin(read application.database);
+    try queue.lock_key(edit transaction, principal.tenant, read key);
+    let previous: backend.Option<model.Receipt> = try queue.replay<model.Receipt>(
+        edit transaction, principal.tenant, read key, fingerprint);
+    match (previous) {
+        case Option.some(let receipt: model.Receipt) {
+            try database.commit(edit transaction);
+            return Result.ok(move(receipt));
+        }
+        case Option.none {
+            try queue.reserve_slot(edit transaction, principal.tenant, 1000);
+            let job_id: backend.Id = try backend.new_id();
+            try jobs.insert(edit transaction, principal.tenant, job_id, read command);
+            let receipt: model.Receipt = model.Receipt {
+                job_id: job_id,
+                state: model.State.queued,
+            };
+            try queue.remember(edit transaction, principal.tenant, read key,
+                fingerprint, read receipt, 86_400);
+            try database.commit(edit transaction);
+            return Result.ok(move(receipt));
+        }
+    }
+}

@@ -1,0 +1,98 @@
+use "common/output.fe";
+use std.io;
+
+enum Search { found(usize), blocked, }
+
+func visit(cell: usize, steps: usize, walls: read u8[], distance: edit usize[], queue: edit usize[], tail: usize) -> usize {
+    if (walls[cell] != 0 || distance[cell] != 999) { return tail; }
+    distance[cell] = steps;
+    queue[tail] = cell;
+    return tail + 1;
+}
+
+func shortest(walls: read u8[], start: usize, goal: usize) -> Search {
+    if (walls.len != 24 || start >= 24 || goal >= 24) { return Search.blocked; }
+    if (walls[start] != 0 || walls[goal] != 0) { return Search.blocked; }
+    var distance: usize[24] = [999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999,
+                               999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999, 999];
+    var queue: usize[24] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var head: usize = 0;
+    var tail: usize = 1;
+    distance[start] = 0;
+    queue[0] = start;
+    while (head < tail) {
+        let cell: usize = queue[head];
+        head += 1;
+        if (cell == goal) { return Search.found(distance[cell]); }
+        let steps: usize = distance[cell] + 1;
+        if (cell % 6 != 0) { tail = visit(cell - 1, steps, read walls, edit distance, edit queue, tail); }
+        if (cell % 6 != 5) { tail = visit(cell + 1, steps, read walls, edit distance, edit queue, tail); }
+        if (cell >= 6) { tail = visit(cell - 6, steps, read walls, edit distance, edit queue, tail); }
+        if (cell < 18) { tail = visit(cell + 6, steps, read walls, edit distance, edit queue, tail); }
+    }
+    return Search.blocked;
+}
+
+func test_shortest_path() -> bool {
+    let walls: u8[24] = [0, 0, 1, 0, 0, 0,
+                         1, 0, 1, 0, 1, 0,
+                         0, 0, 0, 0, 1, 0,
+                         0, 1, 1, 0, 0, 0];
+    match (shortest(read walls, 0, 23)) {
+        case Search.found(let steps: usize) { return steps == 8; }
+        case Search.blocked { return false; }
+    }
+}
+
+func test_blocked_path() -> bool {
+    let walls: u8[24] = [0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0,
+                         0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0];
+    match (shortest(read walls, 0, 2)) {
+        case Search.found(let steps: usize) { return false; }
+        case Search.blocked { return true; }
+    }
+}
+
+func main() -> i32 {
+    let walls: u8[24] = [0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0,
+                         0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0];
+    match (shortest(read walls, 0, 23)) {
+        case Search.found(let steps: usize) {
+            io.print("grid-distance=");
+            if (!output.number(steps)) { return 1; }
+            io.println("");
+            return 0;
+        }
+        case Search.blocked { return 1; }
+    }
+}
+
+func test_open_grid_all_pairs() -> bool {
+    let walls: u8[24] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (var start: usize = 0; start < 24; start += 1) {
+        for (var goal: usize = 0; goal < 24; goal += 1) {
+            var horizontal: usize = 0;
+            var vertical: usize = 0;
+            if (start % 6 >= goal % 6) { horizontal = start % 6 - goal % 6; }
+            else { horizontal = goal % 6 - start % 6; }
+            if (start / 6 >= goal / 6) { vertical = start / 6 - goal / 6; }
+            else { vertical = goal / 6 - start / 6; }
+            match (shortest(read walls, start, goal)) {
+                case Search.found(let steps: usize) {
+                    if (steps != horizontal + vertical) { return false; }
+                }
+                case Search.blocked { return false; }
+            }
+        }
+    }
+    return true;
+}
+
+func test_invalid_grid() -> bool {
+    let walls: u8[1] = [0];
+    match (shortest(read walls, 0, 0)) {
+        case Search.found(let steps: usize) { return false; }
+        case Search.blocked { return true; }
+    }
+}

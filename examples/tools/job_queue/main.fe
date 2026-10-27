@@ -1,0 +1,17 @@
+use scheduler;
+use report;
+
+func main() -> i32 {
+    let summary: scheduler.Summary = scheduler.run(2463534242, 60);
+    if (report.text(read "Fermi queue simulation\n") != 0) { return 74; }
+    if (report.metric(read "generated: ", summary.generated) != 0) { return 74; }
+    if (report.metric(read "completed: ", summary.completed) != 0) { return 74; }
+    if (report.metric(read "skipped: ", summary.skipped) != 0) { return 74; }
+    if (report.metric(read "urgent completed: ", summary.urgent) != 0) { return 74; }
+    if (report.metric(read "work units: ", summary.work) != 0) { return 74; }
+    if (report.metric(read "last completed job: ", summary.last_job) != 0) { return 74; }
+    if (summary.budget_reached) {
+        return report.text(read "stop reason: work budget reached\n");
+    }
+    return report.text(read "stop reason: queue exhausted\n");
+}

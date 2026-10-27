@@ -1,0 +1,67 @@
+enum Action { skip, stop, count, }
+
+@budget(work = 10000, heap = 0)
+export func filtered(values: read i32[]) -> i32 {
+    if (values.len > 100) { return -1; }
+    var total: i32 = 0;
+    for (var i: usize = 0; i < values.len; i += 1) {
+        if (values[i] < 0) { continue; }
+        if (values[i] == 0) { break; }
+        total += values[i];
+    }
+    return total;
+}
+
+func step(index: edit usize[]) -> void { index[0] += 1; }
+
+export func stepped(index: edit usize[], stop: usize) -> usize {
+    var visits: usize = 0;
+    for (var unused: usize = 0; index[0] < 5; step(edit index)) {
+        if (index[0] == stop) { break; }
+        visits += 1;
+        if (index[0] == 1) { continue; }
+    }
+    return visits;
+}
+
+export func while_count() -> usize {
+    var i: usize = 0;
+    var total: usize = 0;
+    while (i < 10) {
+        i += 1;
+        if (i % 2 == 0) { continue; }
+        if (i == 7) { break; }
+        total += i;
+    }
+    return total;
+}
+
+export func nested() -> usize {
+    var total: usize = 0;
+    for (var i: usize = 0; i < 3; i += 1) {
+        for (var j: usize = 0; j < 5; j += 1) {
+            if (j == 1) { continue; }
+            if (j == 3) { break; }
+            total += 1;
+        }
+    }
+    return total;
+}
+
+func action(index: usize) -> Action {
+    if (index == 1) { return Action.skip; }
+    if (index == 4) { return Action.stop; }
+    return Action.count;
+}
+
+export func matched() -> usize {
+    var total: usize = 0;
+    for (var i: usize = 0; i < 10; i += 1) {
+        match (action(i)) {
+            case Action.skip { continue; }
+            case Action.stop { break; }
+            case Action.count { total += 1; }
+        }
+    }
+    return total;
+}

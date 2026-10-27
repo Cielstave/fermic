@@ -1,0 +1,18 @@
+use std.binary;
+
+@budget(work = 250, heap = 0)
+export func read_be(input: read u8[]) -> Result<u32, binary.Error> {
+    return binary.read_u32_be(read input);
+}
+@budget(work = 250, heap = 0)
+export func read_le(input: read u8[]) -> Result<u32, binary.Error> {
+    return binary.read_u32_le(read input);
+}
+@budget(work = 550, heap = 0)
+export func write_be(value: u32, output: edit u8[]) -> Result<usize, binary.Error> {
+    return binary.write_u32_be(value, edit output);
+}
+@budget(work = 550, heap = 0)
+export func write_le(value: u32, output: edit u8[]) -> Result<usize, binary.Error> {
+    return binary.write_u32_le(value, edit output);
+}

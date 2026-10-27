@@ -1,0 +1,249 @@
+use std.mem;
+
+// Text values contain validated UTF-8. Lengths are measured in bytes.
+func equal_bytes(left: read u8[], right: read u8[]) -> bool {
+    if (left.len != right.len) { return false; }
+    for (var index: usize = 0; index < left.len; index += 1) {
+        if (left[index] != right[index]) { return false; }
+    }
+    return true;
+}
+
+@effects()
+pub func equal(left: str, right: str) -> bool {
+    return equal_bytes(read left, read right);
+}
+
+func count_scalars(bytes: read u8[]) -> usize {
+    var count: usize = 0;
+    for (var index: usize = 0; index < bytes.len; index += 1) {
+        if ((bytes[index] & 192) != 128) { count += 1; }
+    }
+    return count;
+}
+
+// Counts Unicode scalar values, not grapheme clusters or display columns.
+@effects()
+pub func scalar_count(value: str) -> usize {
+    return count_scalars(read value);
+}
+
+pub enum Order {
+    less,
+    equal,
+    greater,
+}
+
+func matches_at(value: read u8[], pattern: read u8[], offset: usize) -> bool {
+    if (offset > value.len || pattern.len > value.len - offset) { return false; }
+    for (var index: usize = 0; index < pattern.len; index += 1) {
+        if (value[offset + index] != pattern[index]) { return false; }
+    }
+    return true;
+}
+
+@effects()
+pub func starts_with(value: str, prefix: str) -> bool {
+    return matches_at(read value, read prefix, 0);
+}
+
+@effects()
+pub func ends_with(value: str, suffix: str) -> bool {
+    if (suffix.len > value.len) { return false; }
+    let offset: usize = value.len - suffix.len;
+    return matches_at(read value, read suffix, offset);
+}
+
+func compare_bytes(left: read u8[], right: read u8[]) -> Order {
+    var length: usize = left.len;
+    if (right.len < length) { length = right.len; }
+    for (var index: usize = 0; index < length; index += 1) {
+        if (left[index] < right[index]) { return Order.less; }
+        if (left[index] > right[index]) { return Order.greater; }
+    }
+    if (left.len < right.len) { return Order.less; }
+    if (left.len > right.len) { return Order.greater; }
+    return Order.equal;
+}
+
+// Lexicographic UTF-8 byte order; no normalization or locale processing.
+@effects()
+pub func compare(left: str, right: str) -> Order {
+    return compare_bytes(read left, read right);
+}
+
+pub enum Error {
+    invalid_utf8,
+    no_memory,
+    size_overflow,
+    limit,
+    output_too_small,
+    invalid_state,
+    invalid_range,
+    not_found,
+}
+
+pub struct Text {
+    private bytes: Buffer<u8>;
+}
+
+// Validate scalar encodings without normalization or replacement characters.
+@effects()
+pub func valid_utf8(bytes: read u8[]) -> bool {
+    var offset: usize = 0;
+    while (offset < bytes.len) {
+        let first: u8 = bytes[offset];
+        if (first < 128) {
+            offset += 1;
+        } else {
+            var width: usize = 0;
+            var second_min: u8 = 128;
+            var second_max: u8 = 191;
+            if (first >= 194 && first <= 223) {
+                width = 2;
+            } else {
+                if (first >= 224 && first <= 239) {
+                    width = 3;
+                    if (first == 224) { second_min = 160; }
+                    if (first == 237) { second_max = 159; }
+                } else {
+                    if (first >= 240 && first <= 244) {
+                        width = 4;
+                        if (first == 240) { second_min = 144; }
+                        if (first == 244) { second_max = 143; }
+                    } else { return false; }
+                }
+            }
+            if (width > bytes.len - offset) { return false; }
+            if (bytes[offset + 1] < second_min || bytes[offset + 1] > second_max) { return false; }
+            for (var index: usize = 2; index < width; index += 1) {
+                if (bytes[offset + index] < 128 || bytes[offset + index] > 191) { return false; }
+            }
+            offset += width;
+        }
+    }
+    return true;
+}
+
+func memory_error(error: mem.Error) -> Error {
+    match (error) {
+        case mem.Error.no_memory { return Error.no_memory; }
+        case mem.Error.size_overflow { return Error.size_overflow; }
+        case mem.Error.limit { return Error.limit; }
+        case mem.Error.invalid_argument { return Error.invalid_state; }
+        case mem.Error.invalid_state { return Error.invalid_state; }
+    }
+}
+
+pub func from_utf8(bytes: read u8[], limit: usize) -> Result<Text, Error> {
+    if (bytes.len > limit) { return Result.err(Error.limit); }
+    if (!valid_utf8(read bytes)) { return Result.err(Error.invalid_utf8); }
+    match (mem.from_bytes(read bytes, limit)) {
+        case Result.ok(let buffer: Buffer<u8>) { return Result.ok(Text(bytes = move(buffer))); }
+        case Result.err(let error: mem.Error) { return Result.err(memory_error(error)); }
+    }
+}
+
+pub func append(value: edit Text, bytes: read u8[]) -> Result<usize, Error> {
+    if (!valid_utf8(read bytes)) { return Result.err(Error.invalid_utf8); }
+    let previous: usize = value.bytes.len;
+    if (bytes.len > 18_446_744_073_709_551_615 - previous) { return Result.err(Error.size_overflow); }
+    let length: usize = previous + bytes.len;
+    match (mem.resize(edit value.bytes, length)) {
+        case Result.ok(let size: usize) {
+            for (var index: usize = 0; index < bytes.len; index += 1) {
+                value.bytes[previous + index] = bytes[index];
+            }
+            return Result.ok(size);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(memory_error(error)); }
+    }
+}
+
+@effects(memory)
+pub func length(value: read Text) -> usize { return value.bytes.len; }
+
+@effects(memory)
+pub func scalar_length(value: read Text) -> usize { return count_scalars(read value.bytes); }
+
+@effects(memory)
+pub func copy_into(value: read Text, output: edit u8[]) -> Result<usize, Error> {
+    if (output.len < value.bytes.len) { return Result.err(Error.output_too_small); }
+    for (var index: usize = 0; index < value.bytes.len; index += 1) { output[index] = value.bytes[index]; }
+    return Result.ok(value.bytes.len);
+}
+
+// Validate before resize so every domain error preserves the previous value.
+pub func replace(value: edit Text, bytes: read u8[]) -> Result<usize, Error> {
+    if (!valid_utf8(read bytes)) { return Result.err(Error.invalid_utf8); }
+    match (mem.resize(edit value.bytes, bytes.len)) {
+        case Result.ok(let length: usize) {
+            for (var index: usize = 0; index < bytes.len; index += 1) {
+                value.bytes[index] = bytes[index];
+            }
+            return Result.ok(length);
+        }
+        case Result.err(let error: mem.Error) { return Result.err(memory_error(error)); }
+    }
+}
+
+// Retain capacity for reuse; existing buffer ownership and limits are unchanged.
+pub func clear(value: edit Text) -> Result<usize, Error> {
+    match (mem.resize(edit value.bytes, 0)) {
+        case Result.ok(let length: usize) { return Result.ok(length); }
+        case Result.err(let error: mem.Error) { return Result.err(memory_error(error)); }
+    }
+}
+
+@effects(memory)
+pub func equal_text(left: read Text, right: read Text) -> bool {
+    return equal_bytes(read left.bytes, read right.bytes);
+}
+
+// The ordering matches compare(str, str): exact unsigned UTF-8 byte order.
+@effects(memory)
+pub func compare_text(left: read Text, right: read Text) -> Order {
+    return compare_bytes(read left.bytes, read right.bytes);
+}
+
+func scalar_boundary(bytes: read u8[], offset: usize) -> bool {
+    if (offset > bytes.len) { return false; }
+    if (offset == bytes.len) { return true; }
+    return (bytes[offset] & 192) != 128;
+}
+
+// Report byte offsets. An empty pattern matches at the start of the text.
+@effects(memory)
+pub func find(value: read Text, pattern: str) -> Result<usize, Error> {
+    if (pattern.len > value.bytes.len) { return Result.err(Error.not_found); }
+    let last: usize = value.bytes.len - pattern.len;
+    var offset: usize = 0;
+    while (true) {
+        if (matches_at(read value.bytes, read pattern, offset)) { return Result.ok(offset); }
+        if (offset == last) { break; }
+        offset += 1;
+    }
+    return Result.err(Error.not_found);
+}
+
+// Both endpoints are byte offsets on Unicode scalar boundaries.
+@effects(memory)
+pub func slice_into(value: read Text, start: usize, end: usize, output: edit u8[]) -> Result<usize, Error> {
+    if (start > end || !scalar_boundary(read value.bytes, start) ||
+        !scalar_boundary(read value.bytes, end)) { return Result.err(Error.invalid_range); }
+    let length: usize = end - start;
+    if (output.len < length) { return Result.err(Error.output_too_small); }
+    for (var index: usize = 0; index < length; index += 1) {
+        output[index] = value.bytes[start + index];
+    }
+    return Result.ok(length);
+}
+
+// Shrinking retains capacity and never splits a scalar encoding.
+pub func truncate(value: edit Text, length: usize) -> Result<usize, Error> {
+    if (!scalar_boundary(read value.bytes, length)) { return Result.err(Error.invalid_range); }
+    match (mem.resize(edit value.bytes, length)) {
+        case Result.ok(let size: usize) { return Result.ok(size); }
+        case Result.err(let error: mem.Error) { return Result.err(memory_error(error)); }
+    }
+}

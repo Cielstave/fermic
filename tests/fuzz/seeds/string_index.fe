@@ -1,0 +1,8 @@
+struct Label { value: str; }
+func first(value: str, index: usize) -> u8 { return value[index]; }
+func inspect(index: usize) -> u8 {
+    var label: Label = Label(value = "Aé😀");
+    label.value = "worker";
+    let values: str[2] = [label.value, "é"];
+    return first(values[0], index);
+}

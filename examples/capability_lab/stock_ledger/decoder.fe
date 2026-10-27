@@ -1,0 +1,63 @@
+pub enum Operation { add, take, }
+pub enum Phase { start, gap, item, amount, }
+pub enum Error { invalid_input, number_too_large, }
+pub struct Command { operation: Operation; item: usize; amount: u32; }
+pub enum Event { pending, command(Command), }
+pub struct Decoder {
+    phase: Phase;
+    operation: Operation;
+    item: usize;
+    amount: u32;
+    digits: usize;
+}
+
+pub func initial() -> Decoder {
+    return Decoder(phase = Phase.start, operation = Operation.add, item = 0, amount = 0, digits = 0);
+}
+
+// Commands are ASCII '+ ID AMOUNT\n' or '- ID AMOUNT\n'.
+pub func feed(decoder: edit Decoder, byte: u8) -> Result<Event, Error> {
+    match (decoder.phase) {
+        case Phase.start {
+            if (byte == 10) { return Result.ok(Event.pending); }
+            if (byte == 43) { decoder.operation = Operation.add; }
+            else if (byte == 45) { decoder.operation = Operation.take; }
+            else { return Result.err(Error.invalid_input); }
+            decoder.phase = Phase.gap;
+        }
+        case Phase.gap {
+            if (byte != 32) { return Result.err(Error.invalid_input); }
+            decoder.phase = Phase.item;
+        }
+        case Phase.item {
+            if (byte == 32 && decoder.digits != 0) {
+                decoder.phase = Phase.amount;
+                decoder.digits = 0;
+            } else {
+                if (byte < 48 || byte > 57) { return Result.err(Error.invalid_input); }
+                let digit: usize = widen<usize>(byte - 48);
+                if (decoder.item > (65535 - digit) / 10) { return Result.err(Error.number_too_large); }
+                decoder.item = decoder.item * 10 + digit;
+                decoder.digits += 1;
+            }
+        }
+        case Phase.amount {
+            if (byte == 10 && decoder.digits != 0) {
+                let command: Command = Command(operation = decoder.operation, item = decoder.item, amount = decoder.amount);
+                decoder.phase = Phase.start;
+                decoder.item = 0;
+                decoder.amount = 0;
+                decoder.digits = 0;
+                return Result.ok(Event.command(move(command)));
+            }
+            if (byte < 48 || byte > 57) { return Result.err(Error.invalid_input); }
+            let digit: u32 = widen<u32>(byte - 48);
+            if (decoder.amount > (1000000 - digit) / 10) { return Result.err(Error.number_too_large); }
+            decoder.amount = decoder.amount * 10 + digit;
+            decoder.digits += 1;
+        }
+    }
+    return Result.ok(Event.pending);
+}
+
+pub func complete(decoder: read Decoder) -> bool { return decoder.phase == Phase.start; }

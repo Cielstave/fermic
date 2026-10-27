@@ -1,0 +1,76 @@
+pub enum Priority { low, normal, urgent, }
+
+struct Job {
+    number: usize;
+    work: usize;
+    priority: Priority;
+}
+
+pub struct Summary {
+    generated: usize;
+    completed: usize;
+    skipped: usize;
+    urgent: usize;
+    work: usize;
+    last_job: usize;
+    budget_reached: bool;
+}
+
+// Xorshift32 produces a repeatable workload from a nonzero seed.
+func next_state(state: u32) -> u32 {
+    var value: u32 = state;
+    value = value ^ (value << 13);
+    value = value ^ (value >> 17);
+    return value ^ (value << 5);
+}
+
+func priority(state: u32) -> Priority {
+    let rank: u32 = state % 5;
+    if (rank == 0) { return Priority.urgent; }
+    if (rank == 1) { return Priority.low; }
+    return Priority.normal;
+}
+
+pub func run(seed: u32, budget: usize) -> Summary {
+    var state: u32 = seed;
+    var generated: usize = 0;
+    var completed: usize = 0;
+    var skipped: usize = 0;
+    var urgent: usize = 0;
+    var work: usize = 0;
+    var last_job: usize = 0;
+    var budget_reached: bool = false;
+
+    for (var index: usize = 0; index < 24; index += 1) {
+        state = next_state(state);
+        let job: Job = Job(
+            number = index + 1,
+            work = widen<usize>(state % 9 + 1),
+            priority = priority(state)
+        );
+        generated += 1;
+        match (job.priority) {
+            case Priority.low { skipped += 1; continue; }
+            case Priority.normal {}
+            case Priority.urgent {}
+        }
+        if (job.work > budget - work) {
+            budget_reached = true;
+            break;
+        }
+        work += job.work;
+        completed += 1;
+        last_job = job.number;
+        if (job.priority == Priority.urgent) { urgent += 1; }
+    }
+
+    return Summary(
+        generated = generated,
+        completed = completed,
+        skipped = skipped,
+        urgent = urgent,
+        work = work,
+        last_job = last_job,
+        budget_reached = budget_reached
+    );
+}

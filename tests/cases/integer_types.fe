@@ -1,0 +1,131 @@
+export func minimum_i8() -> i8 { return -128; }
+export func maximum_u16() -> u16 { return 65535; }
+export func maximum_u64() -> u64 { return 18446744073709551615; }
+
+export func negate_i8(value: i8) -> i8 { return -value; }
+export func shift_u16(value: u16, count: usize) -> u16 { return value << count; }
+export func shift_u64(value: u64, count: usize) -> u64 { return value >> count; }
+export func complement_u64(value: u64) -> u64 { return ~value; }
+
+export func widen_i8(value: i8) -> i16 { return widen<i16>(value); }
+export func widen_u16(value: u16) -> i32 { return widen<i32>(value); }
+export func widen_u64(value: u64) -> usize { return widen<usize>(value); }
+export func narrow_i8(value: u64) -> Result<i8, CastError> { return narrow<i8>(value); }
+export func narrow_u16(value: i64) -> Result<u16, CastError> { return narrow<u16>(value); }
+export func narrow_u64(value: i64) -> Result<u64, CastError> { return narrow<u64>(value); }
+
+export func edit_u16(values: edit u16[], index: usize, value: u16) -> u16 {
+    values[index] += value;
+    return values[index];
+}
+
+struct Record { signed: i8; count: u16; sequence: u64; }
+
+export func aggregates(sequence: u64) -> u64 {
+    let record: Record = Record(signed = -128, count = 65535, sequence = sequence);
+    let values: u64[2] = [record.sequence, 18446744073709551615];
+    if (record.signed != -128 || record.count != 65535) { return 0; }
+    return values[0] & values[1];
+}
+
+@budget(work = 5000, heap = 0)
+export func count_u16() -> usize {
+    var limit: u16 = 5;
+    limit /= 1;
+    var count: usize = 0;
+    for (var i: u16 = 0; i < limit; i += 1) { count += 1; }
+    return count;
+}
+
+export func add_i8(left: i8, right: i8) -> i8 {
+    var value: i8 = left;
+    value += right;
+    return value;
+}
+
+export func subtract_i8(left: i8, right: i8) -> i8 {
+    var value: i8 = left;
+    value -= right;
+    return value;
+}
+
+export func multiply_i8(left: i8, right: i8) -> i8 {
+    var value: i8 = left;
+    value *= right;
+    return value;
+}
+
+export func divide_i8(left: i8, right: i8) -> i8 {
+    var value: i8 = left;
+    value /= right;
+    return value;
+}
+
+export func remainder_i8(left: i8, right: i8) -> i8 {
+    var value: i8 = left;
+    value %= right;
+    return value;
+}
+
+export func add_u16(left: u16, right: u16) -> u16 {
+    var value: u16 = left;
+    value += right;
+    return value;
+}
+
+export func subtract_u16(left: u16, right: u16) -> u16 {
+    var value: u16 = left;
+    value -= right;
+    return value;
+}
+
+export func multiply_u16(left: u16, right: u16) -> u16 {
+    var value: u16 = left;
+    value *= right;
+    return value;
+}
+
+export func divide_u16(left: u16, right: u16) -> u16 {
+    var value: u16 = left;
+    value /= right;
+    return value;
+}
+
+export func remainder_u16(left: u16, right: u16) -> u16 {
+    var value: u16 = left;
+    value %= right;
+    return value;
+}
+
+export func add_u64(left: u64, right: u64) -> u64 {
+    var value: u64 = left;
+    value += right;
+    return value;
+}
+
+export func subtract_u64(left: u64, right: u64) -> u64 {
+    var value: u64 = left;
+    value -= right;
+    return value;
+}
+
+export func multiply_u64(left: u64, right: u64) -> u64 {
+    var value: u64 = left;
+    value *= right;
+    return value;
+}
+
+export func divide_u64(left: u64, right: u64) -> u64 {
+    var value: u64 = left;
+    value /= right;
+    return value;
+}
+
+export func remainder_u64(left: u64, right: u64) -> u64 {
+    var value: u64 = left;
+    value %= right;
+    return value;
+}
+
+
+export func narrow_signed_i8(value: i64) -> Result<i8, CastError> { return narrow<i8>(value); }

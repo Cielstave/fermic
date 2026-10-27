@@ -1,0 +1,74 @@
+use std.mem;
+use std.fs;
+
+func reject(accepted: bool) -> Result<void, mem.Error> {
+    if (!accepted) { return Result.err(mem.Error.limit); }
+    return Result.ok();
+}
+
+func filled() -> Result<Buffer<u8>, mem.Error> {
+    var bytes: Buffer<u8> = try(mem.bytes(4, 4));
+    bytes[0] = 71;
+    return Result.ok(move(bytes));
+}
+
+func identity(bytes: Buffer<u8>) -> Buffer<u8> { return move(bytes); }
+func consume(bytes: Buffer<u8>, value: u8) -> u8 { return bytes[0] + value; }
+func owned(accepted: bool) -> Result<Buffer<u8>, mem.Error> {
+    let bytes: Buffer<u8> = try(filled());
+    try(reject(accepted));
+    return Result.ok(move(bytes));
+}
+
+export func chain(accepted: bool, marker: edit u8[]) -> Result<u8, mem.Error> {
+    let first: Buffer<u8> = try(filled());
+    let second: Buffer<u8> = identity(try(owned(accepted)));
+    marker[0] = 1;
+    return Result.ok(first[0] + second[0]);
+}
+
+export func temporary(accepted: bool, marker: edit u8[]) -> Result<u8, mem.Error> {
+    let bytes: Buffer<u8> = try(filled());
+    let value: u8 = consume(move(bytes), try(flag(accepted)));
+    marker[0] = 1;
+    return Result.ok(value);
+}
+
+func flag(accepted: bool) -> Result<u8, mem.Error> {
+    try(reject(accepted));
+    return Result.ok(1);
+}
+
+export func bounds(index: usize) -> Result<u8, mem.Error> {
+    let bytes: Buffer<u8> = try(filled());
+    return Result.ok(bytes[index]);
+}
+
+export func replaced(accepted: bool) -> Result<u8, mem.Error> {
+    var bytes: Buffer<u8> = try(filled());
+    bytes = try(owned(accepted));
+    return Result.ok(bytes[0]);
+}
+
+export func repeated(rounds: usize, accepted: bool) -> Result<usize, mem.Error> {
+    for (var index: usize = 0; index < rounds; index += 1) {
+        let bytes: Buffer<u8> = try(filled());
+        try(reject(accepted));
+    }
+    return Result.ok(rounds);
+}
+
+func input() -> Result<fs.File, fs.Error> {
+    let file: fs.File = try(fs.open_read("input"));
+    return Result.ok(move(file));
+}
+
+export func inspect_input(check_bounds: bool, output: edit u8[]) -> Result<usize, fs.Error> {
+    var file: fs.File = try(input());
+    let count: usize = try(fs.read_into(edit file, edit output));
+    if (check_bounds) {
+        let byte: u8 = output[count];
+    }
+    try(fs.close(move(file)));
+    return Result.ok(count);
+}

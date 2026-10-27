@@ -1,0 +1,94 @@
+use std.args;
+use std.buffer;
+use std.fmt;
+use std.io;
+use std.mem;
+use std.num;
+
+func failure(message: read u8[], status: i32) -> i32 {
+    var offset: usize = 0;
+    while (offset < message.len) {
+        match (io.write_stderr(read message[offset..message.len])) {
+            case Result.ok(let count: usize) {
+                if (count == 0) { return 74; }
+                offset += count;
+            }
+            case Result.err(let error: io.Error) { return 74; }
+        }
+    }
+    return status;
+}
+
+func series(count: usize) -> Result<i64, buffer.Error> {
+    var values: Buffer<i64> = try(buffer.allocate<i64>(0, 4096));
+    for (var index: usize = 0; index < count; index += 1) {
+        match (narrow<i64>(index)) {
+            case Result.ok(let value: i64) {
+                let length: usize = try(buffer.push<i64>(edit values, value - 4));
+            }
+            case Result.err(let error: CastError) { return Result.err(buffer.Error.invalid_argument); }
+        }
+    }
+    var total: i64 = 0;
+    while (values.len != 0) {
+        let value: i64 = try(buffer.pop<i64>(edit values));
+        total += value;
+    }
+    return Result.ok(total);
+}
+
+func print_sum(count: usize) -> i32 {
+    match (series(count)) {
+        case Result.ok(let total: i64) {
+            var output: u8[20] = [0; 20];
+            match (fmt.i64_into(total, edit output)) {
+                case Result.ok(let length: usize) {
+                    io.println(read output[0..length]);
+                    return 0;
+                }
+                case Result.err(let error: fmt.Error) {
+                    return failure(read "series: output buffer too small\n", 70);
+                }
+            }
+        }
+        case Result.err(let error: buffer.Error) {
+            return failure(read "series: sample storage failed\n", 71);
+        }
+    }
+}
+
+func parse_count(bytes: read u8[]) -> i32 {
+    match (num.usize_range(read bytes, 1, 128)) {
+        case Result.ok(let count: usize) { return print_sum(count); }
+        case Result.err(let error: num.Error) {
+            return failure(read "series: count must be a decimal integer in 1..128\n", 65);
+        }
+    }
+}
+
+func run() -> Result<i32, mem.Error> {
+    var input: Buffer<u8> = try(mem.bytes(20, 20));
+    match (args.read_into(0, edit input)) {
+        case Result.ok(let length: usize) { return Result.ok(parse_count(read input[0..length])); }
+        case Result.err(let error: args.Error) {
+            return Result.ok(failure(read "series: invalid count argument\n", 64));
+        }
+    }
+}
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            if (count != 1) { return failure(read "usage: series COUNT\n", 64); }
+        }
+        case Result.err(let error: args.Error) {
+            return failure(read "series: process arguments unavailable\n", 71);
+        }
+    }
+    match (run()) {
+        case Result.ok(let status: i32) { return status; }
+        case Result.err(let error: mem.Error) {
+            return failure(read "series: argument allocation failed\n", 71);
+        }
+    }
+}

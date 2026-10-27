@@ -1,0 +1,27 @@
+use std.args;
+use std.io;
+
+func main() -> i32 {
+    match (args.count()) {
+        case Result.ok(let count: usize) {
+            var output: u8[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            for (var index: usize = 0; index < count; index += 1) {
+                match (args.read_into(index, edit output)) {
+                    case Result.ok(let length: usize) {
+                        match (io.write(read output[0..length])) {
+                            case Result.ok(let written: usize) {}
+                            case Result.err(let error: io.Error) { return 74; }
+                        }
+                    }
+                    case Result.err(let error: args.Error) { return 65; }
+                }
+                match (io.write(read "\n")) {
+                    case Result.ok(let written: usize) {}
+                    case Result.err(let error: io.Error) { return 74; }
+                }
+            }
+            return 0;
+        }
+        case Result.err(let error: args.Error) { return 71; }
+    }
+}

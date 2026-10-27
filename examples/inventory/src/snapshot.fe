@@ -1,0 +1,49 @@
+use "model.fe";
+use std.fs;
+use std.fmt;
+
+func number(file: edit fs.File, value: usize) -> Result<void, fs.Error> {
+    var bytes: u8[20] = [0; 20];
+    match (fmt.usize_into(value, edit bytes)) {
+        case Result.ok(let length: usize) { return fs.write_all(edit file, read bytes[0..length]); }
+        case Result.err(let error: fmt.Error) { return Result.err(fs.Error.invalid_state); }
+    }
+}
+
+func field(file: edit fs.File, value: usize) -> Result<void, fs.Error> {
+    try(fs.write_all(edit file, read " "));
+    return number(edit file, value);
+}
+
+func contents(file: edit fs.File, state: read model.State) -> Result<void, fs.Error> {
+    var previous: usize = 0;
+    for (var row: usize = 0; row < state.items.len; row += 1) {
+        var selected: usize = 64;
+        var next_id: usize = 1000001;
+        for (var index: usize = 0; index < state.items.len; index += 1) {
+            if (state.items[index].active && state.items[index].id > previous &&
+                state.items[index].id < next_id) {
+                selected = index;
+                next_id = state.items[index].id;
+            }
+        }
+        if (selected == 64) { break; }
+        previous = next_id;
+        try(fs.write_all(edit file, read "ITEM"));
+        try(field(edit file, next_id));
+        try(field(edit file, state.items[selected].quantity));
+        try(field(edit file, state.items[selected].price));
+        try(fs.write_all(edit file, read " "));
+        let length: usize = state.items[selected].name_length;
+        try(fs.write_all(edit file, read state.items[selected].name[0..length]));
+        try(fs.write_all(edit file, read "\n"));
+    }
+    return Result.ok();
+}
+
+pub func save(state: read model.State, path: read u8[]) -> Result<void, fs.Error> {
+    var file: fs.File = try(fs.create_new(read path));
+    try(contents(edit file, read state));
+    try(fs.sync(edit file));
+    return fs.close(move(file));
+}

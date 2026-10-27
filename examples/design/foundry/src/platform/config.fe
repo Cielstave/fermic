@@ -1,0 +1,24 @@
+// DESIGN ONLY: future Fermi syntax; not accepted by the current compiler.
+use backend;
+use backend.config;
+
+pub struct Settings {
+    api: config.Api;
+    database: config.Database;
+    identity: config.Identity;
+    limits: config.SharedLimits;
+    worker_count: usize;
+}
+
+pub func load() -> Result<Settings, backend.Failure> {
+    // Required credentials have no insecure fallback; secret values are redacted.
+    let source: config.Environment = config.environment();
+    return Result.ok(Settings {
+        api: try config.private_api(read source, "FOUNDRY_BIND", 8080),
+        database: try config.database(read source, "FOUNDRY_DATABASE_URL", 16),
+        identity: try config.identity(read source, "FOUNDRY_OIDC_ISSUER",
+            "FOUNDRY_OIDC_AUDIENCE"),
+        limits: try config.shared_limits(read source, "FOUNDRY_LIMIT_STORE_URL"),
+        worker_count: try config.usize_range(read source, "FOUNDRY_WORKERS", 1, 32),
+    });
+}

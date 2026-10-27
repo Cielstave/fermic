@@ -1,0 +1,30 @@
+// Width-preserving integer flags. No allocation or external effects are used.
+@effects()
+@budget(work = 100, heap = 0)
+pub func has_all<T: unsigned_integer>(value: T, mask: T) -> bool {
+    return (value & mask) == mask;
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func has_any<T: unsigned_integer>(value: T, mask: T) -> bool {
+    return (value & mask) != 0;
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func set<T: unsigned_integer>(value: T, mask: T) -> T {
+    return value | mask;
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func clear<T: unsigned_integer>(value: T, mask: T) -> T {
+    return value & ~mask;
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func toggle<T: unsigned_integer>(value: T, mask: T) -> T {
+    return value ^ mask;
+}

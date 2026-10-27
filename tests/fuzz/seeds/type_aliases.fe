@@ -1,0 +1,14 @@
+type Count = usize;
+type Input = read u8[];
+type Header = u8[3];
+enum Mode { ready, stopped, }
+type State = Mode;
+func size(bytes: Input) -> Count { return bytes.len; }
+func identity<T: integer>(value: T) -> T { return value; }
+func inspect(value: State) -> Count {
+    let bytes: Header = [1, 2, 3];
+    match (value) {
+        case State.ready { return identity<Count>(size(read bytes)); }
+        case State.stopped { return 0; }
+    }
+}

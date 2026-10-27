@@ -1,0 +1,8 @@
+func forward<T: integer>(value: T) -> T { return nested<T>(value); }
+func nested<T: integer>(value: T) -> T {
+    if (value == 0) { return value; }
+    return forward<T>(value - 1);
+}
+func unused<T: integer>(value: T) -> T { return -value; }
+func f() -> u16 { return forward<u16>(8); }
+func g() -> u16 { return forward<u16>(9); }

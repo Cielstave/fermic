@@ -1,0 +1,235 @@
+// Bounded sensor processing. Transport, clocks, and channel ownership belong to the host.
+// Wire format: "FE", version 1, count u16-le, then signed i16-le readings.
+enum HubError {
+    truncated,
+    bad_magic,
+    unsupported_version,
+    empty_batch,
+    too_many_samples,
+    length_mismatch,
+    output_too_small,
+    invalid_calibration,
+    invalid_thresholds,
+}
+
+struct Calibration {
+    gain: i64;
+    divisor: i64;
+    offset: i64;
+}
+
+struct Thresholds {
+    release: i64;
+    trigger: i64;
+}
+
+struct Summary {
+    count: i64;
+    minimum: i64;
+    maximum: i64;
+    mean: i64;
+    mean_absolute: i64;
+    alarm_samples: i64;
+    rising_edges: i64;
+    falling_edges: i64;
+    alarm_active: bool;
+}
+
+func decode_i16(low: u8, high: u8) -> i16 {
+    let lo: i16 = widen<i16>(low);
+    let hi: i16 = widen<i16>(high);
+    if (high < 128) {
+        return hi * 256 + lo;
+    }
+    return (hi - 128) * 256 + lo - 32767 - 1;
+}
+
+func validate_packet(packet: read u8[]) -> Result<usize, HubError> {
+    if (packet.len < 5) {
+        return Result.err(HubError.truncated);
+    }
+    if (packet[0] != 70 || packet[1] != 69) {
+        return Result.err(HubError.bad_magic);
+    }
+    if (packet[2] != 1) {
+        return Result.err(HubError.unsupported_version);
+    }
+    let count: usize = widen<usize>(packet[3]) + widen<usize>(packet[4]) * 256;
+    if (count == 0) {
+        return Result.err(HubError.empty_batch);
+    }
+    if (count > 4096) {
+        return Result.err(HubError.too_many_samples);
+    }
+    let required: usize = 5 + count * 2;
+    if (packet.len < required) {
+        return Result.err(HubError.truncated);
+    }
+    if (packet.len != required) {
+        return Result.err(HubError.length_mismatch);
+    }
+    return Result.ok(count);
+}
+
+func valid_calibration(calibration: Calibration) -> bool {
+    // These limits keep calibrated values and the whole-batch sum within i64.
+    return calibration.gain >= -1_000_000
+        && calibration.gain <= 1_000_000
+        && calibration.divisor >= 1
+        && calibration.divisor <= 1_000_000
+        && calibration.offset >= -1_000_000_000
+        && calibration.offset <= 1_000_000_000;
+}
+
+func valid_thresholds(thresholds: Thresholds) -> bool {
+    return thresholds.release >= -40_000_000_000
+        && thresholds.trigger <= 40_000_000_000
+        && thresholds.release < thresholds.trigger;
+}
+
+func calibrate(raw: i16, calibration: Calibration) -> i64 {
+    // Division rounds toward zero, including for negative readings.
+    return widen<i64>(raw) * calibration.gain / calibration.divisor + calibration.offset;
+}
+
+func next_alarm(value: i64, active: bool, thresholds: Thresholds) -> bool {
+    if (active) {
+        return value > thresholds.release;
+    }
+    return value >= thresholds.trigger;
+}
+
+func magnitude(value: i64) -> i64 {
+    if (value < 0) {
+        return -value;
+    }
+    return value;
+}
+
+func analyze_batch(
+    packet: read u8[],
+    calibrated: edit i64[],
+    count: usize,
+    calibration: Calibration,
+    thresholds: Thresholds,
+    initial_alarm: bool
+) -> Result<Summary, HubError> {
+    // The work analyzer checks each helper independently of its callers.
+    if (count > 4096) {
+        return Result.err(HubError.too_many_samples);
+    }
+    if (count == 0) {
+        return Result.err(HubError.empty_batch);
+    }
+    var total: i64 = 0;
+    var absolute_total: i64 = 0;
+    var minimum: i64 = 0;
+    var maximum: i64 = 0;
+    var samples: i64 = 0;
+    var alarm_samples: i64 = 0;
+    var rising_edges: i64 = 0;
+    var falling_edges: i64 = 0;
+    var active: bool = initial_alarm;
+
+    for (var i: usize = 0; i < count; i += 1) {
+        let offset: usize = 5 + i * 2;
+        let raw: i16 = decode_i16(packet[offset], packet[offset + 1]);
+        let value: i64 = calibrate(raw, copy(calibration));
+        let next: bool = next_alarm(value, active, copy(thresholds));
+        if (i == 0 || value < minimum) {
+            minimum = value;
+        }
+        if (i == 0 || value > maximum) {
+            maximum = value;
+        }
+        if (next) {
+            alarm_samples += 1;
+        }
+        if (next && !active) {
+            rising_edges += 1;
+        }
+        if (!next && active) {
+            falling_edges += 1;
+        }
+        total += value;
+        absolute_total += magnitude(value);
+        samples += 1;
+        active = next;
+        calibrated[i] = value;
+    }
+
+    return Result.ok(Summary(
+        count = samples,
+        minimum = minimum,
+        maximum = maximum,
+        mean = total / samples,
+        mean_absolute = absolute_total / samples,
+        alarm_samples = alarm_samples,
+        rising_edges = rising_edges,
+        falling_edges = falling_edges,
+        alarm_active = active
+    ));
+}
+
+func write_summary(summary: Summary, report: edit i64[]) -> void {
+    // Flat layout is confined to the ABI adapter; the processing core uses named fields.
+    report[0] = summary.count;
+    report[1] = summary.minimum;
+    report[2] = summary.maximum;
+    report[3] = summary.mean;
+    report[4] = summary.mean_absolute;
+    report[5] = summary.alarm_samples;
+    report[6] = summary.rising_edges;
+    report[7] = summary.falling_edges;
+    report[8] = 0;
+    if (summary.alarm_active) {
+        report[8] = 1;
+    }
+}
+
+@budget(work = 2_000_000, heap = 0)
+export func process_batch(
+    packet: read u8[],
+    calibrated: edit i64[],
+    report: edit i64[],
+    gain: i64,
+    divisor: i64,
+    offset: i64,
+    release: i64,
+    trigger: i64,
+    initial_alarm: bool
+) -> Result<usize, HubError> {
+    let calibration: Calibration = Calibration(gain = gain, divisor = divisor, offset = offset);
+    let thresholds: Thresholds = Thresholds(release = release, trigger = trigger);
+    if (!valid_calibration(copy(calibration))) {
+        return Result.err(HubError.invalid_calibration);
+    }
+    if (!valid_thresholds(copy(thresholds))) {
+        return Result.err(HubError.invalid_thresholds);
+    }
+    let inspected: Result<usize, HubError> = validate_packet(read packet);
+    match (inspected) {
+        case Result.err(let reason: HubError) {
+            return Result.err(reason);
+        }
+        case Result.ok(let count: usize) {
+            if (calibrated.len < count || report.len < 9) {
+                return Result.err(HubError.output_too_small);
+            }
+            // No domain rejection occurs after analyze_batch starts writing samples.
+            let analyzed: Result<Summary, HubError> = analyze_batch(
+                read packet, edit calibrated, count, move(calibration),
+                move(thresholds), initial_alarm
+            );
+            match (analyzed) {
+                case Result.err(let reason: HubError) {
+                    return Result.err(reason);
+                }
+                case Result.ok(let summary: Summary) {
+                    write_summary(move(summary), edit report);
+                    return Result.ok(count);
+                }
+            }
+        }
+    }
+}

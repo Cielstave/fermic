@@ -1,0 +1,40 @@
+use std.mem;
+
+pub struct Job {
+    id: u32;
+    payload: Buffer<u8>;
+}
+
+pub enum Event {
+    received(Job),
+    idle,
+}
+
+pub struct Summary {
+    completed: usize;
+    bytes: usize;
+}
+
+@effects(memory)
+pub func create(id: u32, input: read u8[]) -> Result<Job, mem.Error> {
+    return Result.ok(Job(
+        id = id,
+        payload = try(mem.from_bytes(read input, 64))
+    ));
+}
+
+// Matching transfers the active payload. The job is released on branch exit.
+@effects(memory)
+pub func process(event: Event) -> Summary {
+    match (event) {
+        case Event.received(let job: Job) {
+            if (job.id == 0) {
+                return Summary(completed = 0, bytes = 0);
+            }
+            return Summary(completed = 1, bytes = job.payload.len);
+        }
+        case Event.idle {
+            return Summary(completed = 0, bytes = 0);
+        }
+    }
+}

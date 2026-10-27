@@ -1,0 +1,27 @@
+export func add32(left: i32, right: i32) -> i32 {
+    return left + right;
+}
+export func sub32(left: i32, right: i32) -> i32 {
+    return left - right;
+}
+export func multiply32(left: i32, right: i32) -> i32 {
+    return left * right;
+}
+export func divide32(left: i32, right: i32) -> i32 {
+    return left / right;
+}
+export func remainder32(left: i32, right: i32) -> i32 {
+    return left % right;
+}
+export func negate32(value: i32) -> i32 {
+    return -value;
+}
+export func minimum32() -> i32 {
+    return -2147483648;
+}
+export func widen32(value: i32) -> i64 {
+    return widen<i64>(value);
+}
+export func narrow32(value: i64) -> Result<i32, CastError> {
+    return narrow<i32>(value);
+}

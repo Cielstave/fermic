@@ -1,0 +1,44 @@
+pub enum Route {
+    health,
+    submit,
+    status,
+    unknown,
+}
+
+@effects()
+@budget(work = 100, heap = 0)
+pub func classify(code: u16) -> Route {
+    match (code) {
+        case 0 {
+            return Route.health;
+        }
+        case 1 {
+            return Route.submit;
+        }
+        case 2 {
+            return Route.status;
+        }
+        case _ {
+            return Route.unknown;
+        }
+    }
+}
+
+@effects()
+pub func admitted(ready: bool, queue_available: bool) -> bool {
+    match (ready) {
+        case false {
+            return false;
+        }
+        case true {
+            match (queue_available) {
+                case true {
+                    return true;
+                }
+                case false {
+                    return false;
+                }
+            }
+        }
+    }
+}
