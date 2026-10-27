@@ -1,60 +1,34 @@
 # Fermi
 
-Fermi is a systems-oriented language and toolchain for building high-performance backend services, runtime components, and infrastructure software with explicit ownership and memory safety in mind.
+Fermi is a systems language and compiler project focused on building high-performance backend, runtime, and infrastructure software with explicit ownership, predictable memory behavior, and verification-oriented design.
 
 ## Overview
 
-Fermi combines a focused language design with a native compiler pipeline and runtime model intended for robust systems programming. The project emphasizes:
-
-- explicit resource ownership and borrowing semantics
-- predictable memory and runtime behavior
-- native code generation with validation-oriented tooling
-- a document-first development model for language contracts and architecture
+Fermi is intended for workloads where correctness, resource discipline, and native execution are essential. The project combines a language design centered on ownership and borrowing semantics with a compiler and runtime model intended to support robust systems programming.
 
 ## Current status
 
-Fermi is under active development. The compiler, runtime, and language specification are evolving together, and the project is currently positioned as an experimental systems language rather than a production-ready general-purpose platform.
+Fermi is under active development. The compiler, runtime, and specification continue to evolve together, and the project should be understood as an experimental systems language rather than a production-ready general-purpose platform.
 
-The repository includes source code, specification documents, examples, and tooling for:
+## Focus areas
 
-- compiler and frontend work
-- runtime and memory model support
-- protocol and system-oriented examples
-- design and validation documentation
+- explicit memory and resource management
+- strong ownership and borrowing semantics
+- high-performance backend and infrastructure workloads
+- document-driven language design and validation
 
 ## Documentation
 
-For deeper context, architecture, and project goals, see:
+For further project context, architecture, and development direction, see:
 
 - [docs/README.md](docs/README.md)
 - [docs/PLAN.md](docs/PLAN.md)
 - [docs/spec/README.md](docs/spec/README.md)
 
-## Project structure
+## Philosophy
 
-- `compiler/` — compiler and language pipeline components
-- `runtime/` — runtime support and execution infrastructure
-- `examples/` — runnable examples and feature demonstrations
-- `tests/` — test and validation assets
-- `docs/` — architecture, roadmap, and language specification
-- `bootstrap/` — bootstrap/frontend experiments
-- `dispatch/` — workload simulation and runtime-oriented examples
-
-## Build and validation
-
-Typical local workflow:
-
-```sh
-make
-make test
-```
-
-Additional validation commands and tooling are documented in the project docs and include sanitizer, runtime, and benchmark-oriented workflows.
-
-## Mission
-
-Fermi aims to provide a practical, auditable path for building native software with stronger safety guarantees than traditional unchecked systems programming, while remaining aligned with the needs of performance-sensitive backend and infrastructure workloads.
+Fermi aims to provide a disciplined and auditable foundation for native software development, balancing execution efficiency with stronger safety guarantees than conventional unchecked systems programming.
 
 ## License
 
-Repository licensing details should be checked in the project root and relevant policy files before redistribution or contribution.
+License details for this repository should be reviewed in the project root and relevant policy files before distribution, reuse, or contribution.
